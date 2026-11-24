@@ -59,3 +59,4 @@
 /home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/sprites/rock/frame_00.png
 /home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/sprites/rock/frame_01.png
 /home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/sprites/rock/frame_02.png
+/home/geoki/FactoryBuilder/FactoryBuilder/obj/Debug/net10.0/FactoryBuilder.sourcelink.json

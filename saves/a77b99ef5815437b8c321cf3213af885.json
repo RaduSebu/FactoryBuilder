@@ -3,14 +3,14 @@
   "Id": "a77b99ef5815437b8c321cf3213af885",
   "Name": "sebica",
   "CreatedUtc": "2026-11-22T17:16:15.4288059Z",
-  "UpdatedUtc": "2026-11-22T17:43:12.6023244Z",
+  "UpdatedUtc": "2026-11-24T17:29:48.727254Z",
   "CameraX": -19,
-  "CameraY": -12,
+  "CameraY": -13,
   "Game": {
     "Seed": 320098,
-    "Money": 3287,
-    "Delivered": 265,
-    "Tick": 336,
+    "Money": 3651,
+    "Delivered": 293,
+    "Tick": 364,
     "Level": 3,
     "LevelProgress": 0,
     "LastIncome": 14,
@@ -2450,7 +2450,7 @@
         "Progress": 0,
         "Stock": {},
         "Output": {
-          "IronOre": 156
+          "IronOre": 170
         },
         "BeltItem": null,
         "RecipeId": null,
