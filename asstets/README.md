@@ -16,3 +16,14 @@ Benzile au câte un folder pentru fiecare direcție. Bolovanii, zăcămintele de
 ## Muzică de fundal
 
 Folderul `music/` conține cinci piese WAV (`track_01.wav`–`track_05.wav`). Jocul alege una aleatoriu la pornire, apoi alege aleatoriu o altă piesă de fiecare dată când se termină cea curentă. Înlocuiește fișierele păstrând numele și calea. Butonul „Muzică pornită/oprită” este disponibil atât în meniul principal, cât și în joc. Fișierele audio sunt copiate automat lângă executabil la compilare.
+
+## Texturi pentru iteme
+
+Fiecare item transportat pe bandă are un PNG separat în `items/`. Înlocuiește imaginea dorită păstrând numele fișierului. Sunt recomandate imagini PNG transparente, pătrate, de 64×64 px.
+
+- `iron_ore.png`, `copper_ore.png`
+- `iron_plate.png`, `copper_plate.png`, `copper_wire.png`
+- `gear.png`, `circuit.png`, `frame.png`, `motor.png`
+- `advanced_circuit.png`, `processor.png`, `rocket_part.png`
+
+Textura apare ca o pictogramă peste banda transportoare și se actualizează odată cu itemul. Fișierele sunt copiate automat lângă executabil la compilare.

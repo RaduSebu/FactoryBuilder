@@ -60,3 +60,15 @@
 /home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/sprites/rock/frame_01.png
 /home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/sprites/rock/frame_02.png
 /home/geoki/FactoryBuilder/FactoryBuilder/obj/Debug/net10.0/FactoryBuilder.sourcelink.json
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/advanced_circuit.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/circuit.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/copper_ore.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/copper_plate.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/copper_wire.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/frame.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/gear.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/iron_ore.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/iron_plate.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/motor.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/processor.png
+/home/geoki/FactoryBuilder/FactoryBuilder/bin/Debug/net10.0/asstets/items/rocket_part.png

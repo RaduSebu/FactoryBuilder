@@ -405,6 +405,7 @@ sealed class DesktopGame
     static readonly CloseCallback CloseWindowCallback = OnClose;
     static readonly TimerCallback TimeCallback = OnTimer;
     static readonly TimerCallback SpriteFrameCallback = OnSpriteFrameTimer;
+    static readonly TimerCallback BeltMotionCallback = OnBeltMotionTimer;
     static readonly NotifyCallback MusicEndedCallback = OnMusicEnded;
     static readonly SignalCallback AdjustmentCallback = OnAdjustmentChanged;
     static readonly NotifyCallback ViewportNotifyCallback = OnViewportNotify;
@@ -415,6 +416,9 @@ sealed class DesktopGame
     FactoryGame game;
     readonly Dictionary<(int x, int y), IntPtr> cells = new();
     readonly Dictionary<(int x, int y), IntPtr> cellImages = new();
+    readonly Dictionary<(int x, int y), IntPtr> cellOverlays = new();
+    readonly Dictionary<(int x, int y), IntPtr> beltItemImages = new();
+    readonly Dictionary<(int x, int y), ItemKind> beltItemKinds = new();
     readonly Dictionary<(int x, int y), string[]> cellSpriteFrames = new();
     readonly Dictionary<(int x, int y), int> cellSpriteFrameIndices = new();
     static readonly Dictionary<string, string[]> SpriteFrameCache = new();
@@ -430,6 +434,8 @@ sealed class DesktopGame
     uint resizeTimerId;
     uint scrollRestoreTimerId;
     uint spriteTimerId;
+    uint beltMotionTimerId;
+    double beltMotionProgress;
     bool extendingWorld, centerPending;
     double pendingScrollX, pendingScrollY;
     double cameraWorldX, cameraWorldY;
@@ -598,6 +604,7 @@ sealed class DesktopGame
         StopAuto();
         foreach (var actionWidget in viewActions) Actions.Remove(actionWidget);
         viewActions.Clear(); buildButtons.Clear(); cells.Clear(); cellImages.Clear();
+        cellOverlays.Clear(); beltItemImages.Clear(); beltItemKinds.Clear();
         cellSpriteFrames.Clear(); cellSpriteFrameIndices.Clear();
         if (spriteTimerId != 0) { GtkNative.g_source_remove(spriteTimerId); spriteTimerId = 0; }
         if (resizeTimerId != 0) { GtkNative.g_source_remove(resizeTimerId); resizeTimerId = 0; }
@@ -731,6 +738,7 @@ sealed class DesktopGame
             button.tile.assembler { background: #304252; border-color: #6c9db3; color: #b4e1f2; }
             button.tile.ship { background: #455338; border-color: #b1ce70; color: #e2f7a9; }
             button.tile.busy { box-shadow: inset 0 0 0 2px #d8b76b; }
+            picture.belt-item-texture { background: #17201c; border: 1px solid #dbe8cb; border-radius: 4px; padding: 1px; }
             scrolledwindow.world-map scrollbar { opacity: 0; }
             progressbar trough { min-height: 7px; background: #39463c; border-radius: 5px; }
             progressbar progress { min-height: 7px; background: #b8e068; border-radius: 5px; }
@@ -830,6 +838,7 @@ sealed class DesktopGame
     {
         foreach (var button in cells.Values) Actions.Remove(button);
         cellImages.Clear();
+        cellOverlays.Clear(); beltItemImages.Clear(); beltItemKinds.Clear();
         cellSpriteFrames.Clear(); cellSpriteFrameIndices.Clear();
         if (spriteTimerId != 0) { GtkNative.g_source_remove(spriteTimerId); spriteTimerId = 0; }
         minChunkX = -1; minChunkY = -1; maxChunkX = 1; maxChunkY = 1; cells.Clear();
@@ -917,8 +926,9 @@ sealed class DesktopGame
             if (scrollRestoreTimerId != 0) GtkNative.g_source_remove(scrollRestoreTimerId);
             scrollRestoreTimerId = GtkNative.g_timeout_add(50, Marshal.GetFunctionPointerForDelegate(ScrollRestoreCallback), IntPtr.Zero);
         }
-        // New chunks render their own cells in AttachChunk. Scrolling does not
-        // change existing tiles, so avoid repainting the entire world here.
+        // The visible region is small (at most 3×3 chunks); refresh it so item
+        // textures on belts remain in sync after returning to an unloaded view.
+        RefreshVisibleCells();
     }
 
     void ReattachWorld()
@@ -963,6 +973,11 @@ sealed class DesktopGame
             GtkNative.gtk_widget_set_size_request(button, tileSize, tileSize);
             if (cellImages.TryGetValue(point, out var image))
                 GtkNative.gtk_widget_set_size_request(image, Math.Max(16, tileSize - 6), Math.Max(16, tileSize - 6));
+            if (beltItemImages.TryGetValue(point, out var itemImage))
+            {
+                GtkNative.gtk_widget_set_size_request(itemImage, Math.Max(12, tileSize / 2), Math.Max(12, tileSize / 2));
+                ApplyBeltItemMotion(point, itemImage);
+            }
         }
 
         pendingScrollX = horizontalTile * tileSize;
@@ -991,6 +1006,7 @@ sealed class DesktopGame
             if (!cells.Remove(point, out var button)) continue;
             Actions.Remove(button);
             cellImages.Remove(point);
+            cellOverlays.Remove(point); beltItemImages.Remove(point); beltItemKinds.Remove(point);
             cellSpriteFrames.Remove(point); cellSpriteFrameIndices.Remove(point);
             GtkNative.gtk_grid_remove(mapGrid, button);
         }
@@ -1099,6 +1115,7 @@ sealed class DesktopGame
     {
         var oldLevel = game.Level;
         game.Advance();
+        beltMotionProgress = 0;
         Refresh();
         var saleMessage = game.LastIncome > 0 ? $"Vândut: {game.LastSales} · +${game.LastIncome}. " : "";
         SetMessage(saleMessage + (game.Level > oldLevel
@@ -1128,12 +1145,14 @@ sealed class DesktopGame
         autoRunning = true;
         GtkNative.gtk_button_set_label(autoButton, "⏸  Pauză");
         GtkNative.gtk_widget_add_css_class(autoButton, "suggested-action");
+        EnsureBeltMotionTimer();
     }
 
     void StopAuto()
     {
         if (!autoRunning) return;
         GtkNative.g_source_remove(timerId); timerId = 0; autoRunning = false;
+        if (beltMotionTimerId != 0) { GtkNative.g_source_remove(beltMotionTimerId); beltMotionTimerId = 0; }
         GtkNative.gtk_button_set_label(autoButton, "▶  Pornește timpul");
         GtkNative.gtk_widget_remove_css_class(autoButton, "suggested-action");
     }
@@ -1242,7 +1261,16 @@ sealed class DesktopGame
                 var image = GtkNative.gtk_picture_new_for_filename(frames[0]);
                 GtkNative.gtk_picture_set_can_shrink(image, true);
                 GtkNative.gtk_widget_set_size_request(image, Math.Max(16, tileSize - 6), Math.Max(16, tileSize - 6));
-                GtkNative.gtk_button_set_child(button, image);
+                if (tile.Kind == TileKind.Belt)
+                {
+                    var overlay = GtkNative.gtk_overlay_new();
+                    GtkNative.gtk_widget_set_hexpand(overlay, true);
+                    GtkNative.gtk_widget_set_vexpand(overlay, true);
+                    GtkNative.gtk_overlay_set_child(overlay, image);
+                    GtkNative.gtk_button_set_child(button, overlay);
+                    cellOverlays[(x, y)] = overlay;
+                }
+                else GtkNative.gtk_button_set_child(button, image);
                 cellImages[(x, y)] = image;
                 if (frames.Length > 1)
                 {
@@ -1251,15 +1279,116 @@ sealed class DesktopGame
                     EnsureSpriteTimer();
                 }
             }
+            if (tile.Kind == TileKind.Belt) UpdateBeltItemOverlay((x, y), tile.BeltItem);
         }
         else
         {
             if (cellImages.Remove((x, y))) GtkNative.gtk_button_set_child(button, IntPtr.Zero);
+            cellOverlays.Remove((x, y)); beltItemImages.Remove((x, y)); beltItemKinds.Remove((x, y));
             cellSpriteFrames.Remove((x, y)); cellSpriteFrameIndices.Remove((x, y));
             GtkNative.gtk_button_set_label(button, label);
             StopSpriteTimerIfIdle();
         }
         SetCellStyle(button, css, tile.Stored > 0 || tile.BeltItem is not null);
+    }
+
+    void UpdateBeltItemOverlay((int x, int y) point, ItemKind? item)
+    {
+        if (!cellOverlays.TryGetValue(point, out var overlay)) return;
+        if (item is null || beltItemKinds.GetValueOrDefault(point) != item.Value)
+        {
+            if (beltItemImages.Remove(point, out var previous)) GtkNative.gtk_overlay_remove_overlay(overlay, previous);
+            beltItemKinds.Remove(point);
+        }
+        if (item is not { } kind || beltItemImages.ContainsKey(point)) return;
+        var path = ItemSpritePath(kind);
+        if (!File.Exists(path)) return;
+        var picture = GtkNative.gtk_picture_new_for_filename(path);
+        GtkNative.gtk_picture_set_can_shrink(picture, true);
+        GtkNative.gtk_widget_set_size_request(picture, Math.Max(12, tileSize / 2), Math.Max(12, tileSize / 2));
+        GtkNative.gtk_widget_set_halign(picture, 2); // GTK_ALIGN_END
+        GtkNative.gtk_widget_set_valign(picture, 2);
+        GtkNative.gtk_widget_set_margin_end(picture, 2);
+        GtkNative.gtk_widget_set_margin_bottom(picture, 2);
+        GtkNative.gtk_widget_add_css_class(picture, "belt-item-texture");
+        GtkNative.gtk_overlay_add_overlay(overlay, picture);
+        beltItemImages[point] = picture;
+        beltItemKinds[point] = kind;
+        ApplyBeltItemMotion(point, picture);
+        EnsureBeltMotionTimer();
+    }
+
+    void EnsureBeltMotionTimer()
+    {
+        if (autoRunning && beltItemImages.Count > 0 && beltMotionTimerId == 0)
+            beltMotionTimerId = GtkNative.g_timeout_add(33, Marshal.GetFunctionPointerForDelegate(BeltMotionCallback), IntPtr.Zero);
+    }
+
+    static int OnBeltMotionTimer(IntPtr data)
+    {
+        if (current is null || !current.autoRunning || current.beltItemImages.Count == 0)
+        {
+            if (current is not null) current.beltMotionTimerId = 0;
+            return 0;
+        }
+        current.beltMotionProgress = Math.Min(1, current.beltMotionProgress + 0.033);
+        foreach (var (point, picture) in current.beltItemImages.ToArray())
+            current.ApplyBeltItemMotion(point, picture);
+        return 1;
+    }
+
+    void ApplyBeltItemMotion((int x, int y) point, IntPtr picture)
+    {
+        var tile = game.At(point.x, point.y);
+        var offset = 2 + (int)Math.Round(Math.Max(0, tileSize - Math.Max(12, tileSize / 2) - 4) * beltMotionProgress);
+        switch (tile.Direction)
+        {
+            case Direction.East:
+                GtkNative.gtk_widget_set_halign(picture, 0); // GTK_ALIGN_START
+                GtkNative.gtk_widget_set_valign(picture, 3); // GTK_ALIGN_CENTER
+                GtkNative.gtk_widget_set_margin_start(picture, offset);
+                GtkNative.gtk_widget_set_margin_end(picture, 0);
+                GtkNative.gtk_widget_set_margin_top(picture, 0);
+                GtkNative.gtk_widget_set_margin_bottom(picture, 0);
+                break;
+            case Direction.West:
+                GtkNative.gtk_widget_set_halign(picture, 2); // GTK_ALIGN_END
+                GtkNative.gtk_widget_set_valign(picture, 3);
+                GtkNative.gtk_widget_set_margin_end(picture, offset);
+                GtkNative.gtk_widget_set_margin_start(picture, 0);
+                GtkNative.gtk_widget_set_margin_top(picture, 0);
+                GtkNative.gtk_widget_set_margin_bottom(picture, 0);
+                break;
+            case Direction.South:
+                GtkNative.gtk_widget_set_halign(picture, 3);
+                GtkNative.gtk_widget_set_valign(picture, 0); // GTK_ALIGN_START
+                GtkNative.gtk_widget_set_margin_top(picture, offset);
+                GtkNative.gtk_widget_set_margin_bottom(picture, 0);
+                GtkNative.gtk_widget_set_margin_start(picture, 0);
+                GtkNative.gtk_widget_set_margin_end(picture, 0);
+                break;
+            default: // North
+                GtkNative.gtk_widget_set_halign(picture, 3);
+                GtkNative.gtk_widget_set_valign(picture, 2); // GTK_ALIGN_END
+                GtkNative.gtk_widget_set_margin_bottom(picture, offset);
+                GtkNative.gtk_widget_set_margin_top(picture, 0);
+                GtkNative.gtk_widget_set_margin_start(picture, 0);
+                GtkNative.gtk_widget_set_margin_end(picture, 0);
+                break;
+        }
+    }
+
+    static string ItemSpritePath(ItemKind item)
+    {
+        var file = item switch
+        {
+            ItemKind.IronOre => "iron_ore", ItemKind.CopperOre => "copper_ore",
+            ItemKind.IronPlate => "iron_plate", ItemKind.CopperPlate => "copper_plate",
+            ItemKind.CopperWire => "copper_wire", ItemKind.Gear => "gear", ItemKind.Circuit => "circuit",
+            ItemKind.Frame => "frame", ItemKind.Motor => "motor", ItemKind.AdvancedCircuit => "advanced_circuit",
+            ItemKind.Processor => "processor", _ => "rocket_part"
+        };
+        return Path.Combine(AppContext.BaseDirectory, "asstets", "items", file + ".png");
     }
 
     static string[] SpriteFrames(Tile tile)
@@ -1446,6 +1575,10 @@ static class GtkNative
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_editable_get_text(IntPtr editable);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_editable_set_text(IntPtr editable, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_picture_new_for_filename([MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_overlay_new();
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_overlay_set_child(IntPtr overlay, IntPtr child);
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_overlay_add_overlay(IntPtr overlay, IntPtr child);
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_overlay_remove_overlay(IntPtr overlay, IntPtr child);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_picture_set_filename(IntPtr picture, [MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_picture_set_can_shrink(IntPtr picture, [MarshalAs(UnmanagedType.Bool)] bool canShrink);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_media_file_new_for_filename([MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
