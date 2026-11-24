@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "ELOnGAL0Cuk=",
+  "success": true,
+  "projectFilePath": "/home/geoki/FactoryBuilder/FactoryBuilder/FactoryBuilder.csproj",
+  "expectedPackageFiles": [
+    "/home/geoki/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.14/microsoft.aspnetcore.app.ref.10.0.14.nupkg.sha512"
+  ],
+  "logs": []
+}
