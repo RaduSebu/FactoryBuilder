@@ -4,14 +4,18 @@ Jocul animează sprite-urile schimbând cadre PNG la fiecare 180 ms. Înlocuieș
 
 - `sprites/miner/`
 - `sprites/belt_north/`, `belt_east/`, `belt_south/`, `belt_west/`
-- `sprites/smelter/`
-- `sprites/assembler/`
+- `sprites/iron_smelter/`, `sprites/copper_smelter/`
+- `sprites/wiremill/`, `sprites/gear_press/`, `sprites/circuit_assembler/`
+- `sprites/extruder/`, `sprites/motor_assembler/`, `sprites/pcb_fabricator/`
+- `sprites/processor_assembler/`, `sprites/rocket_fabricator/`
 - `sprites/cargo_ship/`
 - `sprites/rock/`
 - `sprites/iron_deposit/`
 - `sprites/copper_deposit/`
 
 Benzile au câte un folder pentru fiecare direcție. Bolovanii, zăcămintele de fier și cele de cupru au sprite-uri distincte. Fișierele sunt copiate automat lângă executabil la compilare.
+
+Fiecare rețetă de utilaj are acum un nume și o animație separate. Folderele utilajelor folosesc aceeași structură: cadre PNG `frame_00.png`, `frame_01.png` etc. Înlocuiește cadrele din folderul utilajului dorit; păstrează aceeași dimensiune și fundalul transparent pentru animații fără întreruperi. Sunt incluse patru cadre editabile ca sprite-uri de pornire.
 
 ## Muzică de fundal
 

@@ -402,6 +402,7 @@ sealed class DesktopGame
     static readonly Dictionary<IntPtr, Action> Actions = new();
     static readonly SignalCallback ClickCallback = OnClicked;
     static readonly KeyCallback KeyboardCallback = OnKey;
+    static readonly KeyReleaseCallback KeyboardReleaseCallback = OnKeyReleased;
     static readonly CloseCallback CloseWindowCallback = OnClose;
     static readonly TimerCallback TimeCallback = OnTimer;
     static readonly TimerCallback SpriteFrameCallback = OnSpriteFrameTimer;
@@ -409,6 +410,7 @@ sealed class DesktopGame
     static readonly NotifyCallback MusicEndedCallback = OnMusicEnded;
     static readonly SignalCallback AdjustmentCallback = OnAdjustmentChanged;
     static readonly NotifyCallback ViewportNotifyCallback = OnViewportNotify;
+    static readonly NotifyCallback WindowSizeNotifyCallback = OnWindowSizeNotify;
     static readonly IdleCallback ScrollRestoreCallback = OnScrollRestore;
     static readonly IdleCallback ResizeRestoreCallback = OnResizeRestore;
     static DesktopGame? current;
@@ -421,22 +423,26 @@ sealed class DesktopGame
     readonly Dictionary<(int x, int y), ItemKind> beltItemKinds = new();
     readonly Dictionary<(int x, int y), string[]> cellSpriteFrames = new();
     readonly Dictionary<(int x, int y), int> cellSpriteFrameIndices = new();
+    readonly Dictionary<IntPtr, (double width, double height)> responsiveSizes = new();
+    readonly Dictionary<IntPtr, double> responsiveGaps = new();
+    readonly Dictionary<IntPtr, double> responsiveMargins = new();
     static readonly Dictionary<string, string[]> SpriteFrameCache = new();
     readonly Dictionary<string, IntPtr> buildButtons = new();
     readonly HashSet<IntPtr> viewActions = new();
+    readonly HashSet<uint> pressedMovementKeys = new();
     IntPtr window, statusLabel, moneyLabel, tickLabel, levelLabel, deliveryLabel, progressBar, progressHeadingLabel;
     IntPtr seedLabel, worldNameLabel, saveNameEntry, menuStatusLabel, saveListBox, musicToggleButton, musicStream;
     string[] musicTracks = [];
     int musicTrackIndex = -1;
     IntPtr mapGrid, mapScroll, horizontalAdjustment, verticalAdjustment;
     int minChunkX = -1, minChunkY = -1, maxChunkX = 1, maxChunkY = 1;
-    int tileSize = 44;
+    int tileSize;
     uint resizeTimerId;
     uint scrollRestoreTimerId;
     uint spriteTimerId;
     uint beltMotionTimerId;
     double beltMotionProgress;
-    bool extendingWorld, centerPending;
+    bool extendingWorld, centerPending, scrollRestorePending, restoringAdjustments;
     double pendingScrollX, pendingScrollY;
     double cameraWorldX, cameraWorldY;
     IntPtr optionsMiner, optionsBelt, oreIronButton, oreCopperButton, recipeNameLabel, recipeDetailsLabel, recipeCountLabel, recipeUnlockLabel, machineBuildButton;
@@ -455,12 +461,15 @@ sealed class DesktopGame
     {
         InstallTheme();
         mainLoop = GtkNative.g_main_loop_new(IntPtr.Zero, false);
-        window = GtkNative.gtk_window_new(); GtkNative.gtk_window_set_title(window, "Factory Frontier"); GtkNative.gtk_window_set_default_size(window, 1430, 900);
+        window = GtkNative.gtk_window_new(); GtkNative.gtk_window_set_title(window, "Factory Frontier");
+        GtkNative.g_signal_connect_data(window, "notify::width", Marshal.GetFunctionPointerForDelegate(WindowSizeNotifyCallback), IntPtr.Zero, IntPtr.Zero, 0);
+        GtkNative.g_signal_connect_data(window, "notify::height", Marshal.GetFunctionPointerForDelegate(WindowSizeNotifyCallback), IntPtr.Zero, IntPtr.Zero, 0);
         GtkNative.g_signal_connect_data(window, "close-request", Marshal.GetFunctionPointerForDelegate(CloseWindowCallback), IntPtr.Zero, IntPtr.Zero, 0);
         var keys = GtkNative.gtk_event_controller_key_new();
         GtkNative.g_signal_connect_data(keys, "key-pressed", Marshal.GetFunctionPointerForDelegate(KeyboardCallback), IntPtr.Zero, IntPtr.Zero, 0);
+        GtkNative.g_signal_connect_data(keys, "key-released", Marshal.GetFunctionPointerForDelegate(KeyboardReleaseCallback), IntPtr.Zero, IntPtr.Zero, 0);
         GtkNative.gtk_widget_add_controller(window, keys);
-        GtkNative.gtk_window_set_child(window, BuildMainMenu()); GtkNative.gtk_window_present(window);
+        GtkNative.gtk_window_set_child(window, BuildMainMenu()); GtkNative.gtk_window_present(window); GtkNative.gtk_window_maximize(window);
         StartBackgroundMusic();
         GtkNative.g_main_loop_run(mainLoop);
         GtkNative.g_main_loop_unref(mainLoop);
@@ -468,21 +477,21 @@ sealed class DesktopGame
 
     IntPtr BuildMainMenu(string? message = null)
     {
-        var root = Box(1, 18); Margins(root, 28);
-        var heading = Box(0, 12); var headingText = Box(1, 5);
+        var root = Box(1, 1.8); Margins(root, 2.0);
+        var heading = Box(0, 1.2); var headingText = Box(1, 0.5);
         Append(headingText, Label("⚙  FACTORY FRONTIER", "brand"));
         Append(headingText, Label("Meniu principal · gestionează salvările fabricii", "title"));
         GtkNative.gtk_widget_set_hexpand(headingText, true); Append(heading, headingText);
         musicToggleButton = Button(""); Connect(musicToggleButton, ToggleMusic); UpdateMusicButton(); Append(heading, musicToggleButton);
         Append(root, heading);
 
-        var createCard = Box(1, 10); GtkNative.gtk_widget_add_css_class(createCard, "card");
+        var createCard = Box(1, 1); GtkNative.gtk_widget_add_css_class(createCard, "card");
         Append(createCard, Label("SALVARE NOUĂ", "accent muted"));
-        var createRow = Box(0, 10);
+        var createRow = Box(0, 1);
         saveNameEntry = GtkNative.gtk_entry_new();
         GtkNative.gtk_entry_set_placeholder_text(saveNameEntry, "Numele salvării");
         GtkNative.gtk_widget_set_hexpand(saveNameEntry, true);
-        GtkNative.gtk_widget_set_size_request(saveNameEntry, 280, 42);
+        RequestResponsiveSize(saveNameEntry, 22, 5);
         Append(createRow, saveNameEntry);
         var create = Button("＋  Joc nou"); Connect(create, CreateNewSave); Append(createRow, create);
         var rename = Button("Redenumește salvarea selectată"); Connect(rename, RenameSelectedSave); Append(createRow, rename);
@@ -492,15 +501,15 @@ sealed class DesktopGame
         GtkNative.gtk_label_set_wrap(menuStatusLabel, true); Append(root, menuStatusLabel);
         Append(root, Label("SALVĂRI EXISTENTE", "accent muted"));
         var scroll = GtkNative.gtk_scrolled_window_new(); GtkNative.gtk_scrolled_window_set_policy(scroll, 2, 1);
-        GtkNative.gtk_widget_set_vexpand(scroll, true); GtkNative.gtk_widget_set_size_request(scroll, -1, 320);
-        saveListBox = Box(1, 8); GtkNative.gtk_scrolled_window_set_child(scroll, saveListBox); Append(root, scroll);
+        GtkNative.gtk_widget_set_vexpand(scroll, true); RequestResponsiveSize(scroll, 0, 38);
+        saveListBox = Box(1, 0.8); GtkNative.gtk_scrolled_window_set_child(scroll, saveListBox); Append(root, scroll);
 
         var saves = SaveFileStore.List();
         if (saves.Count == 0) Append(saveListBox, Label("Nu există salvări încă.", "muted"));
         foreach (var (path, data) in saves)
         {
-            var row = Box(0, 8); GtkNative.gtk_widget_add_css_class(row, "card");
-            var details = Box(1, 3);
+            var row = Box(0, 0.8); GtkNative.gtk_widget_add_css_class(row, "card");
+            var details = Box(1, 0.3);
             Append(details, Label(data.Name, "value"));
             Append(details, Label($"Actualizată: {data.UpdatedUtc.ToLocalTime():dd.MM.yyyy HH:mm} · Nivel {data.Game.Level} · Tură {data.Game.Tick}", "muted"));
             GtkNative.gtk_widget_set_hexpand(details, true); Append(row, details);
@@ -604,6 +613,8 @@ sealed class DesktopGame
         StopAuto();
         foreach (var actionWidget in viewActions) Actions.Remove(actionWidget);
         viewActions.Clear(); buildButtons.Clear(); cells.Clear(); cellImages.Clear();
+        responsiveSizes.Clear(); responsiveGaps.Clear(); responsiveMargins.Clear();
+        pressedMovementKeys.Clear(); scrollRestorePending = false; restoringAdjustments = false;
         cellOverlays.Clear(); beltItemImages.Clear(); beltItemKinds.Clear();
         cellSpriteFrames.Clear(); cellSpriteFrameIndices.Clear();
         if (spriteTimerId != 0) { GtkNative.g_source_remove(spriteTimerId); spriteTimerId = 0; }
@@ -713,35 +724,35 @@ sealed class DesktopGame
         const string css = """
             window { background: #111715; color: #eff3ea; font-family: "DejaVu Sans", sans-serif; }
             label { color: #e9eee5; }
-            .muted { color: #8e9a90; font-size: 10px; }
-            .title { font-size: 20px; font-weight: bold; }
-            .brand { color: #b8e068; font-size: 20px; font-weight: bold; letter-spacing: 1px; }
-            .card { background: #1a231f; border: 1px solid #304036; border-radius: 9px; padding: 12px; }
-            .metric { background: #1c2621; border: 1px solid #304036; border-radius: 8px; padding: 10px 14px; }
-            .value { color: #eef4e7; font-family: monospace; font-size: 18px; font-weight: bold; }
+            .muted { color: #8e9a90; font-size: 78%; }
+            .title { font-size: 130%; font-weight: bold; }
+            .brand { color: #b8e068; font-size: 140%; font-weight: bold; }
+            .card { background: #1a231f; border: none; border-radius: 2%; padding: 1%; }
+            .metric { background: #1c2621; border: none; border-radius: 2%; padding: 1%; }
+            .value { color: #eef4e7; font-family: monospace; font-size: 115%; font-weight: bold; }
             .accent { color: #b8e068; }
-            button { color: #e4ebdf; background: #202b24; border: 1px solid #3b4b3e; border-radius: 6px; padding: 8px 10px; }
+            button { color: #e4ebdf; background: #202b24; border: none; border-radius: 1%; padding: 1%; }
             button:hover { background: #30402f; border-color: #89a65a; }
             button.suggested-action { background: #3a502d; color: #eef6df; border-color: #799a4b; font-weight: bold; }
-            button.tool { min-height: 48px; }
+            button.tool { padding: 1.5%; }
             button.selected { background: #35462b; border-color: #b8e068; color: #dff2b5; }
             button.danger { color: #efb1a4; }
             button.danger.selected { background: #552e2b; border-color: #db7766; color: #ffe2dc; }
-            button.tile { min-width: 0; min-height: 0; padding: 0; font-size: 14px; font-weight: bold; border-radius: 0; }
+            button.tile { min-width: 0; min-height: 0; padding: 0; font-size: 85%; font-weight: bold; border-radius: 0; }
             button.tile.empty { background: #2b3c2c; border-color: #344735; color: #9cae8e; }
             button.tile.iron { background: #404a43; border-color: #68756c; color: #e0e6dc; }
             button.tile.copper { background: #583e2b; border-color: #a8754c; color: #f0bb87; }
             button.tile.rock { background: #303833; border-color: #48534b; color: #839087; }
             button.tile.miner { background: #35482b; border-color: #8bb35b; color: #d2ee9b; }
-            button.tile.belt { background: #37423a; border-color: #687969; color: #e5ece0; font-size: 18px; }
+            button.tile.belt { background: #37423a; color: #e5ece0; font-size: 105%; }
             button.tile.smelter { background: #513e2d; border-color: #bd8953; color: #f2bb7c; }
             button.tile.assembler { background: #304252; border-color: #6c9db3; color: #b4e1f2; }
             button.tile.ship { background: #455338; border-color: #b1ce70; color: #e2f7a9; }
-            button.tile.busy { box-shadow: inset 0 0 0 2px #d8b76b; }
-            picture.belt-item-texture { background: #17201c; border: 1px solid #dbe8cb; border-radius: 4px; padding: 1px; }
+            button.tile.busy { color: #d8b76b; }
+            picture.belt-item-texture { background: #17201c; border: none; border-radius: 8%; padding: .3%; }
             scrolledwindow.world-map scrollbar { opacity: 0; }
-            progressbar trough { min-height: 7px; background: #39463c; border-radius: 5px; }
-            progressbar progress { min-height: 7px; background: #b8e068; border-radius: 5px; }
+            progressbar trough { background: #39463c; border-radius: 8%; }
+            progressbar progress { background: #b8e068; border-radius: 8%; }
             """;
         var provider = GtkNative.gtk_css_provider_new();
         GtkNative.gtk_css_provider_load_from_data(provider, css, -1);
@@ -751,9 +762,9 @@ sealed class DesktopGame
 
     IntPtr BuildLayout()
     {
-        var root = Box(1, 14); Margins(root, 22);
+        var root = Box(1, 1.4); Margins(root, 1.6);
         Append(root, BuildHeader()); Append(root, BuildMetrics());
-        var body = Box(0, 18); GtkNative.gtk_widget_set_vexpand(body, true); Append(root, body);
+        var body = Box(0, 1.8); GtkNative.gtk_widget_set_vexpand(body, true); Append(root, body);
         Append(body, BuildMapArea()); Append(body, BuildSidebar());
         var footer = Label("FACTORY FRONTIER     ·     UN MIC COLȚ DE LUME, O MARE LINIE DE PRODUCȚIE", "muted");
         Append(root, footer); return root;
@@ -761,7 +772,7 @@ sealed class DesktopGame
 
     IntPtr BuildHeader()
     {
-        var row = Box(0, 14); var brand = Label("⚙  FACTORY FRONTIER", "brand"); Append(row, brand);
+        var row = Box(0, 1.4); var brand = Label("⚙  FACTORY FRONTIER", "brand"); Append(row, brand);
         var spacer = Label("CONSTRUIEȘTE  ·  AUTOMATIZEAZĂ  ·  LIVREAZĂ", "muted"); GtkNative.gtk_widget_set_hexpand(spacer, true); GtkNative.gtk_label_set_xalign(spacer, 1); Append(row, spacer);
         var save = Button("▣  Salvează"); Connect(save, SaveFromGame); Append(row, save);
         musicToggleButton = Button(""); Connect(musicToggleButton, ToggleMusic); UpdateMusicButton(); Append(row, musicToggleButton);
@@ -771,29 +782,30 @@ sealed class DesktopGame
 
     IntPtr BuildMetrics()
     {
-        var row = Box(0, 10);
+        var row = Box(0, 1);
         Append(row, Metric("BUGET", out moneyLabel)); Append(row, Metric("NIVEL", out levelLabel)); Append(row, Metric("TURĂ", out tickLabel));
-        var contract = Box(1, 6); GtkNative.gtk_widget_add_css_class(contract, "metric"); GtkNative.gtk_widget_set_hexpand(contract, true);
+        var contract = Box(1, 0.6); GtkNative.gtk_widget_add_css_class(contract, "metric"); GtkNative.gtk_widget_set_hexpand(contract, true);
         progressHeadingLabel = Label("", "muted"); Append(contract, progressHeadingLabel);
-        var status = Box(0, 12); deliveryLabel = Label("0 / 3", "value"); Append(status, deliveryLabel);
+        var status = Box(0, 1.2); deliveryLabel = Label("0 / 3", "value"); Append(status, deliveryLabel);
         progressBar = GtkNative.gtk_progress_bar_new(); GtkNative.gtk_widget_set_hexpand(progressBar, true); GtkNative.gtk_progress_bar_set_fraction(progressBar, 0); Append(status, progressBar); Append(contract, status); Append(row, contract);
-        var controls = Box(0, 8);
-        var advance = Button("⏭  +1 tură"); GtkNative.gtk_widget_set_size_request(advance, 95, 58); Connect(advance, Advance); Append(controls, advance);
-        autoButton = Button("⏸  Pauză", "suggested-action"); GtkNative.gtk_widget_set_size_request(autoButton, 145, 58); Connect(autoButton, ToggleAuto); Append(controls, autoButton);
+        var controls = Box(0, 0.8);
+        var advance = Button("⏭  +1 tură"); RequestResponsiveSize(advance, 8, 6.5); Connect(advance, Advance); Append(controls, advance);
+        autoButton = Button("⏸  Pauză", "suggested-action"); RequestResponsiveSize(autoButton, 12, 6.5); Connect(autoButton, ToggleAuto); Append(controls, autoButton);
         Append(row, controls);
         return row;
     }
 
     IntPtr Metric(string caption, out IntPtr value)
     {
-        var box = Box(1, 5); GtkNative.gtk_widget_add_css_class(box, "metric"); GtkNative.gtk_widget_set_size_request(box, 160, 59);
+        var box = Box(1, 0.5); GtkNative.gtk_widget_add_css_class(box, "metric"); RequestResponsiveSize(box, 12, 6.5);
         Append(box, Label(caption, "muted")); value = Label("", "value"); Append(box, value); return box;
     }
 
     IntPtr BuildMapArea()
     {
-        var area = Box(1, 10); GtkNative.gtk_widget_add_css_class(area, "card"); GtkNative.gtk_widget_set_hexpand(area, true); GtkNative.gtk_widget_set_vexpand(area, true);
-        var heading = Box(0, 12); var titles = Box(1, 4); Append(titles, Label("ZONA DE PRODUCȚIE  ·  SECTOR 01", "accent muted"));
+        if (tileSize == 0) tileSize = ResponsiveUnit(4);
+        var area = Box(1, 1); GtkNative.gtk_widget_add_css_class(area, "card"); GtkNative.gtk_widget_set_hexpand(area, true); GtkNative.gtk_widget_set_vexpand(area, true);
+        var heading = Box(0, 1.2); var titles = Box(1, 0.4); Append(titles, Label("ZONA DE PRODUCȚIE  ·  SECTOR 01", "accent muted"));
         worldNameLabel = Label(activeSaveName ?? "Lume nouă", "title"); Append(titles, worldNameLabel); Append(heading, titles);
         seedLabel = Label("", "muted"); GtkNative.gtk_widget_set_hexpand(seedLabel, true); GtkNative.gtk_label_set_xalign(seedLabel, 1); Append(heading, seedLabel); Append(area, heading);
         mapScroll = GtkNative.gtk_scrolled_window_new(); GtkNative.gtk_widget_add_css_class(mapScroll, "world-map");
@@ -876,6 +888,7 @@ sealed class DesktopGame
 
     void OnScrolled()
     {
+        if (restoringAdjustments || scrollRestorePending) return;
         if (centerPending) { RefreshVisibleCells(); return; }
         if (extendingWorld) return;
         var h = GtkNative.gtk_adjustment_get_value(horizontalAdjustment);
@@ -923,6 +936,7 @@ sealed class DesktopGame
         if (shiftX > 0 || shiftY > 0)
         {
             pendingScrollX = h + shiftX; pendingScrollY = v + shiftY;
+            scrollRestorePending = true;
             if (scrollRestoreTimerId != 0) GtkNative.g_source_remove(scrollRestoreTimerId);
             scrollRestoreTimerId = GtkNative.g_timeout_add(50, Marshal.GetFunctionPointerForDelegate(ScrollRestoreCallback), IntPtr.Zero);
         }
@@ -946,6 +960,44 @@ sealed class DesktopGame
     }
 
     static void OnViewportNotify(IntPtr widget, IntPtr property, IntPtr data) => current?.ResizeTilesToViewport();
+    static void OnWindowSizeNotify(IntPtr widget, IntPtr property, IntPtr data) => current?.ApplyResponsiveLayout();
+
+    void RequestResponsiveSize(IntPtr widget, double widthPercent, double heightPercent = 0)
+    {
+        responsiveSizes[widget] = (widthPercent, heightPercent);
+        ApplyResponsiveSize(widget, widthPercent, heightPercent);
+    }
+
+    void ApplyResponsiveSize(IntPtr widget, double widthPercent, double heightPercent)
+    {
+        var width = widthPercent > 0 ? PercentOf(GtkNative.gtk_widget_get_width(window), widthPercent) : -1;
+        var height = heightPercent > 0 ? PercentOf(GtkNative.gtk_widget_get_height(window), heightPercent) : -1;
+        GtkNative.gtk_widget_set_size_request(widget, width, height);
+    }
+
+    static int PercentOf(int extent, double percent) => (int)Math.Round(extent * percent / 100);
+
+    int ResponsiveUnit(double percent)
+    {
+        var width = GtkNative.gtk_widget_get_width(window);
+        var height = GtkNative.gtk_widget_get_height(window);
+        return PercentOf(Math.Min(width, height), percent);
+    }
+
+    void ApplyResponsiveLayout()
+    {
+        if (window == IntPtr.Zero) return;
+        foreach (var (widget, size) in responsiveSizes.ToArray())
+            ApplyResponsiveSize(widget, size.width, size.height);
+        foreach (var (box, percent) in responsiveGaps.ToArray()) GtkNative.gtk_box_set_spacing(box, ResponsiveUnit(percent));
+        foreach (var (widget, percent) in responsiveMargins.ToArray())
+        {
+            var margin = ResponsiveUnit(percent);
+            GtkNative.gtk_widget_set_margin_start(widget, margin); GtkNative.gtk_widget_set_margin_end(widget, margin);
+            GtkNative.gtk_widget_set_margin_top(widget, margin); GtkNative.gtk_widget_set_margin_bottom(widget, margin);
+        }
+        if (mapScroll != IntPtr.Zero) ResizeTilesToViewport();
+    }
 
     void ResizeTilesToViewport()
     {
@@ -955,27 +1007,29 @@ sealed class DesktopGame
 
         // Size tiles to show roughly the same number of columns and rows in
         // both a maximized and a smaller window, while keeping them square.
-        var newSize = Math.Clamp(Math.Min(viewportWidth / 18, viewportHeight / 12), 24, 48);
+        var newSize = (int)Math.Round(Math.Min(viewportWidth * .0556, viewportHeight * .0833));
+        if (newSize <= 0) return;
         if (newSize == tileSize) return;
 
         var oldSize = tileSize;
         var preserveCenteredOrigin = centerPending;
         var horizontalTile = preserveCenteredOrigin
             ? -minChunkX * FactoryGame.Width
-            : GtkNative.gtk_adjustment_get_value(horizontalAdjustment) / oldSize;
+            : oldSize > 0 ? GtkNative.gtk_adjustment_get_value(horizontalAdjustment) / oldSize : 0;
         var verticalTile = preserveCenteredOrigin
             ? -minChunkY * FactoryGame.Height
-            : GtkNative.gtk_adjustment_get_value(verticalAdjustment) / oldSize;
+            : oldSize > 0 ? GtkNative.gtk_adjustment_get_value(verticalAdjustment) / oldSize : 0;
 
         tileSize = newSize;
         foreach (var (point, button) in cells)
         {
             GtkNative.gtk_widget_set_size_request(button, tileSize, tileSize);
             if (cellImages.TryGetValue(point, out var image))
-                GtkNative.gtk_widget_set_size_request(image, Math.Max(16, tileSize - 6), Math.Max(16, tileSize - 6));
+                GtkNative.gtk_widget_set_size_request(image, (int)Math.Round(tileSize * .9), (int)Math.Round(tileSize * .9));
             if (beltItemImages.TryGetValue(point, out var itemImage))
             {
-                GtkNative.gtk_widget_set_size_request(itemImage, Math.Max(12, tileSize / 2), Math.Max(12, tileSize / 2));
+                var iconSize = BeltItemIconSize(beltItemKinds.GetValueOrDefault(point));
+                GtkNative.gtk_widget_set_size_request(itemImage, iconSize, iconSize);
                 ApplyBeltItemMotion(point, itemImage);
             }
         }
@@ -1015,25 +1069,25 @@ sealed class DesktopGame
 
     IntPtr BuildSidebar()
     {
-        var side = Box(1, 12); GtkNative.gtk_widget_set_size_request(side, 298, -1);
-        var tools = Box(1, 8); GtkNative.gtk_widget_add_css_class(tools, "card");
+        var side = Box(1, 1.2); RequestResponsiveSize(side, 18);
+        var tools = Box(1, 0.8); GtkNative.gtk_widget_add_css_class(tools, "card");
         Append(tools, Label("TRUSA DE LUCRU", "accent muted")); Append(tools, Label("Construcții", "title"));
-        AddTool(tools, "⛏   Miner                              $25", "miner"); AddTool(tools, "➜   Bandă                              $2", "belt");
+        AddTool(tools, "⛏ Miner · $25", "miner"); AddTool(tools, "➜ Bandă · $2", "belt");
         AddTool(tools, "⌫   Demolează", "delete", "danger");
-        AddTool(tools, "🚀   Navă cargo                       $120", "ship");
-        optionsMiner = Box(1, 5); GtkNative.gtk_widget_set_visible(optionsMiner, false);
-        Append(optionsMiner, Label("TIPUL MINEREULUI", "muted")); var ores = Box(0, 6);
+        AddTool(tools, "🚀 Navă cargo · $120", "ship");
+        optionsMiner = Box(1, 0.5); GtkNative.gtk_widget_set_visible(optionsMiner, false);
+        Append(optionsMiner, Label("TIPUL MINEREULUI", "muted")); var ores = Box(0, 0.6);
         oreIronButton = Button("Fe · Fier"); oreCopperButton = Button("Cu · Cupru");
         Connect(oreIronButton, () => { ore = ItemKind.IronOre; SetOptionSelection(); }); Connect(oreCopperButton, () => { ore = ItemKind.CopperOre; SetOptionSelection(); });
         Append(ores, oreIronButton); Append(ores, oreCopperButton); Append(optionsMiner, ores); Append(tools, optionsMiner);
-        optionsBelt = Box(1, 5); GtkNative.gtk_widget_set_visible(optionsBelt, false); Append(optionsBelt, Label("DIRECȚIA BENZII", "muted"));
-        var dirs = Box(0, 6);
+        optionsBelt = Box(1, 0.5); GtkNative.gtk_widget_set_visible(optionsBelt, false); Append(optionsBelt, Label("DIRECȚIA BENZII", "muted"));
+        var dirs = Box(0, 0.6);
         foreach (var (glyph, dir) in new[] { ("↑", Direction.North), ("→", Direction.East), ("↓", Direction.South), ("←", Direction.West) })
         { var b = Button(glyph); Connect(b, () => { direction = dir; UpdateDirectionButtons(dirs); }); Append(dirs, b); }
         Append(optionsBelt, dirs); Append(tools, optionsBelt);
-        var recipeCard = Box(1, 7); GtkNative.gtk_widget_add_css_class(recipeCard, "card");
+        var recipeCard = Box(1, 0.7); GtkNative.gtk_widget_add_css_class(recipeCard, "card");
         Append(recipeCard, Label("LABORATOR DE REȚETE", "accent muted"));
-        var recipeNav = Box(0, 6); var previous = Button("◀"); recipeNameLabel = Label("", "title"); GtkNative.gtk_widget_set_hexpand(recipeNameLabel, true); GtkNative.gtk_label_set_xalign(recipeNameLabel, .5f);
+        var recipeNav = Box(0, 0.6); var previous = Button("◀"); recipeNameLabel = Label("", "title"); GtkNative.gtk_widget_set_hexpand(recipeNameLabel, true); GtkNative.gtk_label_set_xalign(recipeNameLabel, .5f);
         var next = Button("▶"); Connect(previous, () => CycleRecipe(-1)); Connect(next, () => CycleRecipe(1));
         Append(recipeNav, previous); Append(recipeNav, recipeNameLabel); Append(recipeNav, next); Append(recipeCard, recipeNav);
         recipeCountLabel = Label("", "muted"); Append(recipeCard, recipeCountLabel);
@@ -1042,16 +1096,16 @@ sealed class DesktopGame
         machineBuildButton = Button("♨  Plasează utilajul", "tool"); buildButtons["machine"] = machineBuildButton;
         Connect(machineBuildButton, () => { mode = mode == "machine" ? null : "machine"; RefreshToolSelection(); SetMessage(mode is null ? "Selectează o clădire sau inspectează harta." : "Plasează utilajul rețetei selectate pe un loc liber."); });
         Append(recipeCard, machineBuildButton); Append(side, recipeCard); Append(side, tools);
-        var mission = Box(1, 8); GtkNative.gtk_widget_add_css_class(mission, "card");
+        var mission = Box(1, 0.8); GtkNative.gtk_widget_add_css_class(mission, "card");
         Append(mission, Label("✦  PROGRESUL FABRICII", "accent muted")); Append(mission, Label("10 niveluri · 10 rețete", "title"));
-        Append(mission, Label("Toate produsele finite aduc venit când sunt livrate, indiferent de nivel. Pentru progres, livrează de 3 ori produsul cerut. Nave cargo noi: $120.", "muted"));
+        var missionText = Label("Toate produsele finite aduc venit când sunt livrate, indiferent de nivel. Pentru progres, livrează de 3 ori produsul cerut. Nave cargo noi: $120.", "muted"); GtkNative.gtk_label_set_wrap(missionText, true); Append(mission, missionText);
         Append(side, mission);
         statusLabel = Label("Plasează un miner lângă un zăcământ ca să începi.", "muted"); GtkNative.gtk_label_set_wrap(statusLabel, true);
-        var status = Box(0, 9); GtkNative.gtk_widget_add_css_class(status, "card"); Append(status, Label("⌁", "accent")); Append(status, statusLabel); Append(side, status);
+        var status = Box(0, 0.9); GtkNative.gtk_widget_add_css_class(status, "card"); Append(status, Label("⌁", "accent")); Append(status, statusLabel); Append(side, status);
         var scroller = GtkNative.gtk_scrolled_window_new();
         GtkNative.gtk_scrolled_window_set_policy(scroller, 2, 1);
         GtkNative.gtk_scrolled_window_set_child(scroller, side);
-        GtkNative.gtk_widget_set_size_request(scroller, 315, -1);
+        RequestResponsiveSize(scroller, 18);
         GtkNative.gtk_widget_set_vexpand(scroller, true);
         return scroller;
     }
@@ -1082,10 +1136,30 @@ sealed class DesktopGame
         GtkNative.gtk_label_set_text(recipeUnlockLabel, nextRecipe is null
             ? "Toate rețetele sunt deblocate."
             : $"Următoarea rețetă: {nextRecipe.Name} · Nivel {nextRecipe.Level}");
-        var machine = recipe.Machine == TileKind.Smelter ? "♨  Topitor" : "▦  Asamblor";
+        var machine = $"▦  {MachineName(recipe.Id)}";
         var cost = recipe.Machine == TileKind.Smelter ? 30 : 45;
         GtkNative.gtk_button_set_label(machineBuildButton, $"{machine} · ${cost}");
     }
+
+    static string MachineName(string recipeId) => recipeId switch
+    {
+        "iron_plate" => "Iron Smelter", "copper_plate" => "Copper Smelter",
+        "copper_wire" => "Wiremill", "iron_gear" => "Gear Press",
+        "circuit" => "Circuit Assembler", "frame" => "Extruder",
+        "motor" => "Motor Assembler", "advanced_circuit" => "PCB Fabricator",
+        "processor" => "Processor Assembler", "rocket_part" => "Rocket Fabricator",
+        _ => "Factory Machine"
+    };
+
+    static string MachineSpriteFolder(string recipeId) => recipeId switch
+    {
+        "iron_plate" => "iron_smelter", "copper_plate" => "copper_smelter",
+        "copper_wire" => "wiremill", "iron_gear" => "gear_press",
+        "circuit" => "circuit_assembler", "frame" => "extruder",
+        "motor" => "motor_assembler", "advanced_circuit" => "pcb_fabricator",
+        "processor" => "processor_assembler", "rocket_part" => "rocket_fabricator",
+        _ => "assembler"
+    };
 
     static string ItemName(ItemKind item) => item switch
     {
@@ -1103,7 +1177,8 @@ sealed class DesktopGame
             var tile = game.At(x, y); var extra = tile.Stored > 0 ? $" · {tile.Stored} obiecte în așteptare" : "";
             if (tile.InstalledRecipe is { } recipe)
                 extra += $" · Rețetă: {recipe.Name} · {MachineStatus(tile, recipe)}";
-            SetMessage($"{TileName(tile.Kind)} · coordonatele {x}, {y}{extra}"); return;
+            var name = tile.InstalledRecipe is { } installed ? MachineName(installed.Id) : TileName(tile.Kind);
+            SetMessage($"{name} · coordonatele {x}, {y}{extra}"); return;
         }
         if (mode == "delete") SetMessage(game.Delete(x, y));
         else SetMessage(game.Build(mode, x, y, ore, direction, game.UnlockedRecipes[selectedRecipeIndex].Id));
@@ -1116,6 +1191,7 @@ sealed class DesktopGame
         var oldLevel = game.Level;
         game.Advance();
         beltMotionProgress = 0;
+        RefreshLoadedBelts();
         Refresh();
         var saleMessage = game.LastIncome > 0 ? $"Vândut: {game.LastSales} · +${game.LastIncome}. " : "";
         SetMessage(saleMessage + (game.Level > oldLevel
@@ -1168,9 +1244,12 @@ sealed class DesktopGame
         if (current is null) return 0;
         current.scrollRestoreTimerId = 0;
         if (current.mapScroll == IntPtr.Zero) return 0;
-        current.centerPending = false;
+        current.restoringAdjustments = true;
         GtkNative.gtk_adjustment_set_value(current.horizontalAdjustment, current.pendingScrollX);
         GtkNative.gtk_adjustment_set_value(current.verticalAdjustment, current.pendingScrollY);
+        current.restoringAdjustments = false;
+        current.scrollRestorePending = false;
+        current.centerPending = false;
         current.RefreshVisibleCells();
         return 0;
     }
@@ -1180,9 +1259,11 @@ sealed class DesktopGame
         if (current is null) return 0;
         current.resizeTimerId = 0;
         if (current.mapScroll == IntPtr.Zero) return 0;
-        current.centerPending = false;
+        current.restoringAdjustments = true;
         GtkNative.gtk_adjustment_set_value(current.horizontalAdjustment, current.pendingScrollX);
         GtkNative.gtk_adjustment_set_value(current.verticalAdjustment, current.pendingScrollY);
+        current.restoringAdjustments = false;
+        current.centerPending = false;
         current.RefreshVisibleCells();
         return 0;
     }
@@ -1235,13 +1316,21 @@ sealed class DesktopGame
         for (var y = top; y < top + visibleRows; y++)
         for (var x = left; x < left + visibleColumns; x++)
             if (cells.TryGetValue((x, y), out var button)) RenderCell(x, y, button);
+
+    }
+
+    void RefreshLoadedBelts()
+    {
+        foreach (var (point, button) in cells.ToArray())
+            if (game.At(point.x, point.y).Kind == TileKind.Belt)
+                RenderCell(point.x, point.y, button);
     }
 
     void RenderCell(int x, int y, IntPtr button)
     {
         var tile = game.At(x, y);
         var description = tile.InstalledRecipe is { } recipe
-            ? $"{TileName(tile.Kind)} · {recipe.Name}"
+            ? $"{MachineName(recipe.Id)} · produce {recipe.Product}"
             : tile.Kind == TileKind.Belt
                 ? $"Bandă transportoare {Arrow(tile.Direction)}" + (tile.BeltItem is { } item ? $" · transportă {ItemName(item)}" : " · goală")
                 : TileName(tile.Kind);
@@ -1260,7 +1349,7 @@ sealed class DesktopGame
                 GtkNative.gtk_button_set_label(button, "");
                 var image = GtkNative.gtk_picture_new_for_filename(frames[0]);
                 GtkNative.gtk_picture_set_can_shrink(image, true);
-                GtkNative.gtk_widget_set_size_request(image, Math.Max(16, tileSize - 6), Math.Max(16, tileSize - 6));
+                GtkNative.gtk_widget_set_size_request(image, (int)Math.Round(tileSize * .9), (int)Math.Round(tileSize * .9));
                 if (tile.Kind == TileKind.Belt)
                 {
                     var overlay = GtkNative.gtk_overlay_new();
@@ -1279,7 +1368,23 @@ sealed class DesktopGame
                     EnsureSpriteTimer();
                 }
             }
-            if (tile.Kind == TileKind.Belt) UpdateBeltItemOverlay((x, y), tile.BeltItem);
+            if (tile.Kind == TileKind.Belt)
+            {
+                var point = (x, y);
+                if (!cellOverlays.ContainsKey(point))
+                {
+                    // Recover if a cell was reattached with its picture but
+                    // without the item overlay bookkeeping.
+                    var overlay = GtkNative.gtk_overlay_new();
+                    GtkNative.gtk_widget_set_hexpand(overlay, true);
+                    GtkNative.gtk_widget_set_vexpand(overlay, true);
+                    GtkNative.gtk_button_set_child(button, IntPtr.Zero);
+                    GtkNative.gtk_overlay_set_child(overlay, cellImages[point]);
+                    GtkNative.gtk_button_set_child(button, overlay);
+                    cellOverlays[point] = overlay;
+                }
+                UpdateBeltItemOverlay(point, tile.BeltItem);
+            }
         }
         else
         {
@@ -1305,11 +1410,13 @@ sealed class DesktopGame
         if (!File.Exists(path)) return;
         var picture = GtkNative.gtk_picture_new_for_filename(path);
         GtkNative.gtk_picture_set_can_shrink(picture, true);
-        GtkNative.gtk_widget_set_size_request(picture, Math.Max(12, tileSize / 2), Math.Max(12, tileSize / 2));
+        var iconSize = BeltItemIconSize(kind);
+        GtkNative.gtk_widget_set_size_request(picture, iconSize, iconSize);
         GtkNative.gtk_widget_set_halign(picture, 2); // GTK_ALIGN_END
         GtkNative.gtk_widget_set_valign(picture, 2);
-        GtkNative.gtk_widget_set_margin_end(picture, 2);
-        GtkNative.gtk_widget_set_margin_bottom(picture, 2);
+        var inset = (int)Math.Round(tileSize * .04);
+        GtkNative.gtk_widget_set_margin_end(picture, inset);
+        GtkNative.gtk_widget_set_margin_bottom(picture, inset);
         GtkNative.gtk_widget_add_css_class(picture, "belt-item-texture");
         GtkNative.gtk_overlay_add_overlay(overlay, picture);
         beltItemImages[point] = picture;
@@ -1340,7 +1447,9 @@ sealed class DesktopGame
     void ApplyBeltItemMotion((int x, int y) point, IntPtr picture)
     {
         var tile = game.At(point.x, point.y);
-        var offset = 2 + (int)Math.Round(Math.Max(0, tileSize - Math.Max(12, tileSize / 2) - 4) * beltMotionProgress);
+        var item = beltItemKinds.GetValueOrDefault(point);
+        var inset = (int)Math.Round(tileSize * .04);
+        var offset = inset + (int)Math.Round(Math.Max(0, tileSize - BeltItemIconSize(item) - inset * 2) * beltMotionProgress);
         switch (tile.Direction)
         {
             case Direction.East:
@@ -1378,6 +1487,12 @@ sealed class DesktopGame
         }
     }
 
+    int BeltItemIconSize(ItemKind item)
+    {
+        var scale = item is ItemKind.CopperOre or ItemKind.CopperPlate or ItemKind.CopperWire ? 0.70 : 0.52;
+        return (int)Math.Round(tileSize * scale);
+    }
+
     static string ItemSpritePath(ItemKind item)
     {
         var file = item switch
@@ -1393,7 +1508,9 @@ sealed class DesktopGame
 
     static string[] SpriteFrames(Tile tile)
     {
-        var folder = tile.Kind switch
+        var folder = tile.InstalledRecipe is { } recipe
+            ? MachineSpriteFolder(recipe.Id)
+            : tile.Kind switch
         {
             TileKind.IronDeposit => "iron_deposit",
             TileKind.CopperDeposit => "copper_deposit",
@@ -1499,10 +1616,20 @@ sealed class DesktopGame
     { var button = GtkNative.gtk_button_new_with_label(text); if (css is not null) GtkNative.gtk_widget_add_css_class(button, css); return button; }
     static IntPtr Label(string text, string? css = null)
     { var label = GtkNative.gtk_label_new(text); if (css is not null) GtkNative.gtk_widget_add_css_class(label, css); return label; }
-    static IntPtr Box(int orientation, int spacing) => GtkNative.gtk_box_new(orientation, spacing);
+    IntPtr Box(int orientation, double spacingPercent)
+    {
+        var box = GtkNative.gtk_box_new(orientation, ResponsiveUnit(spacingPercent));
+        responsiveGaps[box] = spacingPercent;
+        return box;
+    }
     static void Append(IntPtr box, IntPtr child) => GtkNative.gtk_box_append(box, child);
-    static void Margins(IntPtr widget, int margin)
-    { GtkNative.gtk_widget_set_margin_start(widget, margin); GtkNative.gtk_widget_set_margin_end(widget, margin); GtkNative.gtk_widget_set_margin_top(widget, margin); GtkNative.gtk_widget_set_margin_bottom(widget, margin); }
+    void Margins(IntPtr widget, double marginPercent)
+    {
+        responsiveMargins[widget] = marginPercent;
+        var margin = ResponsiveUnit(marginPercent);
+        GtkNative.gtk_widget_set_margin_start(widget, margin); GtkNative.gtk_widget_set_margin_end(widget, margin);
+        GtkNative.gtk_widget_set_margin_top(widget, margin); GtkNative.gtk_widget_set_margin_bottom(widget, margin);
+    }
     void Connect(IntPtr widget, Action action) { Actions[widget] = action; viewActions.Add(widget); GtkNative.g_signal_connect_data(widget, "clicked", Marshal.GetFunctionPointerForDelegate(ClickCallback), IntPtr.Zero, IntPtr.Zero, 0); }
     static void OnClicked(IntPtr widget, IntPtr data) { if (Actions.TryGetValue(widget, out var action)) action(); }
     static int OnKey(IntPtr controller, uint keyval, uint keycode, uint state, IntPtr data)
@@ -1510,21 +1637,36 @@ sealed class DesktopGame
         if (current is null || current.mapScroll == IntPtr.Zero) return 0;
         if (keyval is 0x77 or 0x57 or 0x61 or 0x41 or 0x73 or 0x53 or 0x64 or 0x44)
         {
+            // GTK emits key-pressed repeatedly while a key is held. Movement
+            // is cell-based, so accept one move until the matching key release.
+            if (!current.pressedMovementKeys.Add(keyval)) return 1;
             var step = (double)current.tileSize;
             var horizontal = GtkNative.gtk_adjustment_get_value(current.horizontalAdjustment);
             var vertical = GtkNative.gtk_adjustment_get_value(current.verticalAdjustment);
-            if (keyval is 0x77 or 0x57) vertical -= step;
-            else if (keyval is 0x73 or 0x53) vertical += step;
-            else if (keyval is 0x61 or 0x41) horizontal -= step;
-            else horizontal += step;
-            GtkNative.gtk_adjustment_set_value(current.horizontalAdjustment, horizontal);
-            GtkNative.gtk_adjustment_set_value(current.verticalAdjustment, vertical);
+            var deltaX = 0d; var deltaY = 0d;
+            if (keyval is 0x77 or 0x57) deltaY = -step;
+            else if (keyval is 0x73 or 0x53) deltaY = step;
+            else if (keyval is 0x61 or 0x41) deltaX = -step;
+            else deltaX = step;
+
+            if (current.centerPending || current.scrollRestorePending)
+            {
+                current.pendingScrollX += deltaX;
+                current.pendingScrollY += deltaY;
+            }
+            else if (deltaX != 0)
+                GtkNative.gtk_adjustment_set_value(current.horizontalAdjustment, horizontal + deltaX);
+            else if (deltaY != 0)
+                GtkNative.gtk_adjustment_set_value(current.verticalAdjustment, vertical + deltaY);
             return 1;
         }
         if (keyval == 0x20) { current.Advance(); return 1; }
         if (keyval == 0xff1b) { current.mode = null; current.RefreshToolSelection(); current.SetMessage("Selectează o clădire sau inspectează harta."); return 1; }
         return 0;
     }
+
+    static void OnKeyReleased(IntPtr controller, uint keyval, uint keycode, uint state, IntPtr data)
+        => current?.pressedMovementKeys.Remove(keyval);
     static int OnClose(IntPtr window, IntPtr data)
     {
         if (current is not null)
@@ -1545,6 +1687,7 @@ sealed class DesktopGame
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void SignalCallback(IntPtr widget, IntPtr data);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int KeyCallback(IntPtr controller, uint keyval, uint keycode, uint state, IntPtr data);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void KeyReleaseCallback(IntPtr controller, uint keyval, uint keycode, uint state, IntPtr data);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int CloseCallback(IntPtr window, IntPtr data);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int TimerCallback(IntPtr data);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int IdleCallback(IntPtr data);
@@ -1558,10 +1701,11 @@ static class GtkNative
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern int gtk_init_check();
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_window_new();
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_set_title(IntPtr window, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
-    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_set_default_size(IntPtr window, int width, int height);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_set_child(IntPtr window, IntPtr child);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_present(IntPtr window);
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_maximize(IntPtr window);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_box_new(int orientation, int spacing);
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_box_set_spacing(IntPtr box, int spacing);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_box_append(IntPtr box, IntPtr child);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_label_new([MarshalAs(UnmanagedType.LPUTF8Str)] string text);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_label_set_text(IntPtr label, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
