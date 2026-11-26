@@ -23,12 +23,17 @@ catch (EntryPointNotFoundException ex)
     Environment.ExitCode = 1;
 }
 
-enum TileKind { Empty, IronDeposit, CopperDeposit, Rock, Miner, Belt, Smelter, Assembler, Ship }
-enum ItemKind { IronOre, CopperOre, IronPlate, CopperPlate, CopperWire, Gear, Circuit, Frame, Motor, AdvancedCircuit, Processor, RocketPart }
+enum TileKind { Empty, IronDeposit, CopperDeposit, Rock, Miner, Belt, Smelter, Assembler, Ship, OilDeposit, Pipe, OilPump, Distillery, ChemicalReactor, Polymerizer, RubberTree, LatexCollector, GlueMixer, TinDeposit, Tree, AlloySmelter, RotorPress }
+enum ItemKind { IronOre, CopperOre, IronPlate, CopperPlate, CopperWire, Gear, Circuit, Frame, Motor, AdvancedCircuit, Processor, RocketPart, TinOre, Bronze, Rotor, Pump, Mainframe, Thruster }
+enum FluidKind { Petroleum, Ethanol, Ethylene, Polyethylene, Latex, Glue, SolderingAlloy }
 enum Direction { North, East, South, West }
 
 sealed record FactoryRecipe(string Id, int Level, string Name, string Product, TileKind Machine,
-    ItemKind Output, int Reward, Dictionary<ItemKind, int> Inputs);
+    ItemKind? Output, int Reward, Dictionary<ItemKind, int> Inputs)
+{
+    public Dictionary<FluidKind, int> FluidInputs { get; init; } = new();
+    public FluidKind? FluidProduct { get; init; }
+}
 
 static class RecipeBook
 {
@@ -37,16 +42,87 @@ static class RecipeBook
         new("iron_plate", 1, "Placă de fier", "Fe placă", TileKind.Smelter, ItemKind.IronPlate, 12, new() { [ItemKind.IronOre] = 1 }),
         new("copper_plate", 2, "Placă de cupru", "Cu placă", TileKind.Smelter, ItemKind.CopperPlate, 14, new() { [ItemKind.CopperOre] = 1 }),
         new("copper_wire", 3, "Fir de cupru", "Fir Cu", TileKind.Assembler, ItemKind.CopperWire, 16, new() { [ItemKind.CopperPlate] = 1 }),
+        new("soldering_alloy", 4, "Aliaj de lipit", "Aliaj de lipit lichid", TileKind.Smelter, null, 0, new() { [ItemKind.TinOre] = 1 })
+        { FluidProduct = FluidKind.SolderingAlloy },
         new("iron_gear", 4, "Roată dințată", "Angrenaj", TileKind.Assembler, ItemKind.Gear, 18, new() { [ItemKind.IronPlate] = 2 }),
-        new("circuit", 5, "Circuit", "Circuit", TileKind.Assembler, ItemKind.Circuit, 24, new() { [ItemKind.IronPlate] = 1, [ItemKind.CopperWire] = 2 }),
-        new("frame", 6, "Cadru ranforsat", "Cadru", TileKind.Assembler, ItemKind.Frame, 28, new() { [ItemKind.IronPlate] = 2, [ItemKind.Gear] = 1 }),
-        new("motor", 7, "Motor", "Motor", TileKind.Assembler, ItemKind.Motor, 34, new() { [ItemKind.Gear] = 1, [ItemKind.CopperWire] = 1 }),
+        new("circuit", 5, "Circuit", "Circuit", TileKind.Assembler, ItemKind.Circuit, 24, new() { [ItemKind.IronPlate] = 1, [ItemKind.CopperWire] = 2 })
+        { FluidInputs = new() { [FluidKind.SolderingAlloy] = 1 } },
+        new("bronze", 5, "Bronz", "Bronz", TileKind.AlloySmelter, ItemKind.Bronze, 30, new() { [ItemKind.TinOre] = 1, [ItemKind.CopperOre] = 1 }),
+        new("rotor", 6, "Rotor", "Rotor", TileKind.RotorPress, ItemKind.Rotor, 32, new() { [ItemKind.IronPlate] = 2 }),
+        new("frame", 6, "Cadru ranforsat", "Cadru", TileKind.Assembler, ItemKind.Frame, 28, new() { [ItemKind.IronPlate] = 2, [ItemKind.Gear] = 1 })
+        { FluidInputs = new() { [FluidKind.Glue] = 1 } },
+        new("motor", 7, "Motor", "Motor", TileKind.Assembler, ItemKind.Motor, 34, new() { [ItemKind.Gear] = 1, [ItemKind.CopperWire] = 1 })
+        { FluidInputs = new() { [FluidKind.Polyethylene] = 1 } },
+        new("pump_component", 7, "Pump", "Pump", TileKind.Assembler, ItemKind.Pump, 42, new() { [ItemKind.Bronze] = 1, [ItemKind.Rotor] = 1 }),
         new("advanced_circuit", 8, "Circuit avansat", "Circuit+", TileKind.Assembler, ItemKind.AdvancedCircuit, 42, new() { [ItemKind.Circuit] = 1, [ItemKind.CopperPlate] = 1, [ItemKind.CopperWire] = 1 }),
-        new("processor", 9, "Procesor", "Procesor", TileKind.Assembler, ItemKind.Processor, 55, new() { [ItemKind.AdvancedCircuit] = 1, [ItemKind.Frame] = 1 }),
-        new("rocket_part", 10, "Piesă de rachetă", "Rachetă", TileKind.Assembler, ItemKind.RocketPart, 75, new() { [ItemKind.Processor] = 1, [ItemKind.Motor] = 1, [ItemKind.Frame] = 1 })
+        new("processor", 9, "Procesor", "Procesor", TileKind.Assembler, ItemKind.Processor, 55, new() { [ItemKind.AdvancedCircuit] = 1, [ItemKind.Frame] = 1 })
+        { FluidInputs = new() { [FluidKind.SolderingAlloy] = 2 } },
+        new("rocket_part", 10, "Piesă de rachetă", "Rachetă", TileKind.Assembler, ItemKind.RocketPart, 75, new() { [ItemKind.Processor] = 1, [ItemKind.Motor] = 1, [ItemKind.Frame] = 1 }),
+        new("mainframe", 11, "Mainframe", "Mainframe", TileKind.Assembler, ItemKind.Mainframe, 110, new() { [ItemKind.Processor] = 2, [ItemKind.Frame] = 1 })
+        { FluidInputs = new() { [FluidKind.SolderingAlloy] = 1 } },
+        new("thruster", 12, "Thruster", "Thruster", TileKind.Assembler, ItemKind.Thruster, 95, new() { [ItemKind.Pump] = 1, [ItemKind.Motor] = 1 })
+        { FluidInputs = new() { [FluidKind.Glue] = 1 } }
     ];
+    public static int BuildCost(FactoryRecipe recipe) => recipe.Machine switch
+    {
+        TileKind.Smelter => 30, TileKind.AlloySmelter => 55, TileKind.RotorPress => 50, _ => 45
+    };
     public static FactoryRecipe ById(string id) => All.First(r => r.Id == id);
     public static FactoryRecipe? ForOutput(ItemKind item) => All.FirstOrDefault(r => r.Output == item);
+}
+
+sealed record FluidRecipe(string Id, string Name, string MachineName, TileKind Machine,
+    FluidKind Input, FluidKind Output);
+
+static class FluidRecipeBook
+{
+    public static readonly FluidRecipe[] All =
+    [
+        new("petroleum_to_ethanol", "Petrol → Etanol", "Distilerie", TileKind.Distillery, FluidKind.Petroleum, FluidKind.Ethanol),
+        new("ethanol_to_ethylene", "Etanol → Etilenă", "Reactor chimic", TileKind.ChemicalReactor, FluidKind.Ethanol, FluidKind.Ethylene),
+        new("ethylene_to_polyethylene", "Etilenă → Polietilenă", "Polimerizator", TileKind.Polymerizer, FluidKind.Ethylene, FluidKind.Polyethylene),
+        new("latex_to_glue", "Latex → Lipici", "Malaxor de lipici", TileKind.GlueMixer, FluidKind.Latex, FluidKind.Glue)
+    ];
+    public static FluidRecipe ById(string id) => All.First(r => r.Id == id);
+    public static FluidRecipe? ForInput(FluidKind fluid) => All.FirstOrDefault(r => r.Input == fluid);
+    public static int SaleValue(FluidKind fluid) => fluid switch
+    {
+        FluidKind.Petroleum => 8, FluidKind.Ethanol => 16, FluidKind.Ethylene => 20,
+        FluidKind.Polyethylene => 65, FluidKind.Latex => 10, FluidKind.SolderingAlloy => 22, _ => 28
+    };
+    public static string Name(FluidKind fluid) => fluid switch
+    {
+        FluidKind.Petroleum => "petrol", FluidKind.Ethanol => "etanol",
+        FluidKind.Ethylene => "etilenă", FluidKind.Polyethylene => "polietilenă", FluidKind.Latex => "latex", FluidKind.Glue => "lipici", _ => "aliaj de lipit"
+    };
+}
+
+sealed record DeliveryContract(Dictionary<ItemKind, int> Items, Dictionary<FluidKind, int> Fluids)
+{
+    public int Total => Items.Values.Sum() + Fluids.Values.Sum();
+}
+
+static class ContractBook
+{
+    static Dictionary<ItemKind, int> Items(params (ItemKind item, int count)[] values) => values.ToDictionary(v => v.item, v => v.count);
+    static Dictionary<FluidKind, int> Fluids(params (FluidKind fluid, int count)[] values) => values.ToDictionary(v => v.fluid, v => v.count);
+
+    public static DeliveryContract ForLevel(int level) => level switch
+    {
+        1 => new(Items((ItemKind.IronPlate, 3)), Fluids()),
+        2 => new(Items((ItemKind.IronPlate, 4), (ItemKind.CopperPlate, 5)), Fluids()),
+        3 => new(Items((ItemKind.IronPlate, 6), (ItemKind.CopperWire, 8)), Fluids()),
+        4 => new(Items((ItemKind.IronPlate, 10), (ItemKind.CopperPlate, 3), (ItemKind.Gear, 10)), Fluids((FluidKind.Ethanol, 5))),
+        5 => new(Items((ItemKind.Circuit, 8), (ItemKind.CopperWire, 6)), Fluids((FluidKind.Polyethylene, 5), (FluidKind.SolderingAlloy, 5))),
+        6 => new(Items((ItemKind.Frame, 8), (ItemKind.Gear, 6)), Fluids((FluidKind.Polyethylene, 8), (FluidKind.Glue, 5))),
+        7 => new(Items((ItemKind.Motor, 6), (ItemKind.Circuit, 8)), Fluids((FluidKind.Glue, 8))),
+        8 => new(Items((ItemKind.AdvancedCircuit, 6)), Fluids((FluidKind.Polyethylene, 10), (FluidKind.Ethylene, 5))),
+        9 => new(Items((ItemKind.Processor, 4), (ItemKind.Motor, 8)), Fluids((FluidKind.Ethanol, 10), (FluidKind.SolderingAlloy, 8))),
+        10 => new(Items((ItemKind.RocketPart, 3), (ItemKind.CopperPlate, 5)), Fluids((FluidKind.Polyethylene, 10), (FluidKind.Glue, 10))),
+        11 => new(Items((ItemKind.Mainframe, 2)), Fluids((FluidKind.SolderingAlloy, 5))),
+        12 => new(Items((ItemKind.Thruster, 3), (ItemKind.Pump, 3)), Fluids((FluidKind.Glue, 5))),
+        _ => new(Items(), Fluids())
+    };
 }
 
 sealed class Tile
@@ -57,11 +133,17 @@ sealed class Tile
     public int Progress;
     public Dictionary<ItemKind, int> Stock = new();
     public Dictionary<ItemKind, int> Output = new();
+    public Dictionary<FluidKind, int> FluidStock = new();
     public ItemKind? BeltItem;
+    public FluidKind? PipeFluid;
+    public FluidKind? FluidInput;
+    public FluidKind? FluidOutput;
     public string? RecipeId;
+    public string? FluidRecipeId;
     public bool PlayerBuilt;
     public FactoryRecipe? InstalledRecipe => RecipeId is null ? null : RecipeBook.ById(RecipeId);
-    public int Stored => Stock.Values.Sum() + Output.Values.Sum();
+    public FluidRecipe? InstalledFluidRecipe => FluidRecipeId is null ? null : FluidRecipeBook.ById(FluidRecipeId);
+    public int Stored => Stock.Values.Sum() + Output.Values.Sum() + FluidStock.Values.Sum() + (PipeFluid is null ? 0 : 1) + (FluidInput is null ? 0 : 1) + (FluidOutput is null ? 0 : 1);
 }
 
 sealed class SavedCoordinate
@@ -80,8 +162,13 @@ sealed class SavedTile
     public int Progress { get; set; }
     public Dictionary<ItemKind, int> Stock { get; set; } = new();
     public Dictionary<ItemKind, int> Output { get; set; } = new();
+    public Dictionary<FluidKind, int> FluidStock { get; set; } = new();
     public ItemKind? BeltItem { get; set; }
+    public FluidKind? PipeFluid { get; set; }
+    public FluidKind? FluidInput { get; set; }
+    public FluidKind? FluidOutput { get; set; }
     public string? RecipeId { get; set; }
+    public string? FluidRecipeId { get; set; }
     public bool PlayerBuilt { get; set; }
 }
 
@@ -93,6 +180,8 @@ sealed class FactoryGameData
     public int Tick { get; set; }
     public int Level { get; set; }
     public int LevelProgress { get; set; }
+    public Dictionary<ItemKind, int> ContractItems { get; set; } = new();
+    public Dictionary<FluidKind, int> ContractFluids { get; set; } = new();
     public int LastIncome { get; set; }
     public string LastSales { get; set; } = "";
     public List<SavedCoordinate> GeneratedChunks { get; set; } = new();
@@ -114,33 +203,39 @@ sealed class SaveFileData
 
 sealed class FactoryGame
 {
-    public const int Width = 16, Height = 10, MaxLevel = 10, DeliveriesPerLevel = 3;
+    public const int Width = 16, Height = 10, MaxLevel = 12;
     readonly Dictionary<(int x, int y), Tile> map = new();
     readonly HashSet<(int x, int y)> generatedChunks = new();
     readonly HashSet<(int x, int y)> buildings = new();
+    readonly Dictionary<ItemKind, int> ContractItems = new();
+    readonly Dictionary<FluidKind, int> ContractFluids = new();
     public int Money { get; private set; }
     public int Delivered { get; private set; }
     public int Tick { get; private set; }
     public int Seed { get; private set; }
     public int Level { get; private set; }
     public int LevelProgress { get; private set; }
+    public DeliveryContract CurrentContract => ContractBook.ForLevel(Level);
     public int LastIncome { get; private set; }
     public string LastSales { get; private set; } = "";
-    public IReadOnlyList<FactoryRecipe> UnlockedRecipes => RecipeBook.All.Where(r => r.Level <= Level).ToArray();
+    public IReadOnlyList<FactoryRecipe> UnlockedRecipes => RecipeBook.All.Where(r => r.Level <= Level).OrderBy(r => r.Level).ToArray();
 
     public FactoryGame() => Reset();
 
     public FactoryGameData ExportSaveData() => new()
     {
         Seed = Seed, Money = Money, Delivered = Delivered, Tick = Tick, Level = Level,
-        LevelProgress = LevelProgress, LastIncome = LastIncome, LastSales = LastSales,
+        LevelProgress = LevelProgress, ContractItems = new(ContractItems), ContractFluids = new(ContractFluids),
+        LastIncome = LastIncome, LastSales = LastSales,
         GeneratedChunks = generatedChunks.Select(c => new SavedCoordinate { X = c.x, Y = c.y }).ToList(),
         Buildings = buildings.Select(c => new SavedCoordinate { X = c.x, Y = c.y }).ToList(),
         Tiles = map.Select(entry => new SavedTile
         {
             X = entry.Key.x, Y = entry.Key.y, Kind = entry.Value.Kind, Direction = entry.Value.Direction,
             Ore = entry.Value.Ore, Progress = entry.Value.Progress, Stock = new(entry.Value.Stock),
-            Output = new(entry.Value.Output), BeltItem = entry.Value.BeltItem, RecipeId = entry.Value.RecipeId,
+            Output = new(entry.Value.Output), FluidStock = new(entry.Value.FluidStock), BeltItem = entry.Value.BeltItem, RecipeId = entry.Value.RecipeId,
+            PipeFluid = entry.Value.PipeFluid, FluidInput = entry.Value.FluidInput, FluidOutput = entry.Value.FluidOutput,
+            FluidRecipeId = entry.Value.FluidRecipeId,
             PlayerBuilt = entry.Value.PlayerBuilt
         }).ToList()
     };
@@ -155,11 +250,22 @@ sealed class FactoryGame
             game.map[(saved.X, saved.Y)] = new Tile
             {
                 Kind = saved.Kind, Direction = saved.Direction, Ore = saved.Ore, Progress = saved.Progress,
-                Stock = saved.Stock ?? new(), Output = saved.Output ?? new(), BeltItem = saved.BeltItem,
-                RecipeId = saved.RecipeId, PlayerBuilt = saved.PlayerBuilt
+                Stock = saved.Stock ?? new(), Output = saved.Output ?? new(), FluidStock = saved.FluidStock ?? new(), BeltItem = saved.BeltItem,
+                PipeFluid = saved.PipeFluid, FluidInput = saved.FluidInput, FluidOutput = saved.FluidOutput,
+                RecipeId = saved.RecipeId, FluidRecipeId = saved.FluidRecipeId, PlayerBuilt = saved.PlayerBuilt
             };
         game.Seed = data.Seed; game.Money = data.Money; game.Delivered = data.Delivered;
         game.Tick = data.Tick; game.Level = data.Level; game.LevelProgress = data.LevelProgress;
+        game.ContractItems.Clear(); game.ContractFluids.Clear();
+        foreach (var (item, count) in data.ContractItems ?? new()) game.ContractItems[item] = count;
+        foreach (var (fluid, count) in data.ContractFluids ?? new()) game.ContractFluids[fluid] = count;
+        if (game.ContractItems.Count == 0 && game.ContractFluids.Count == 0 && game.LevelProgress > 0 && game.Level < MaxLevel)
+        {
+            var legacyItem = game.CurrentContract.Items.FirstOrDefault();
+            if (!legacyItem.Equals(default(KeyValuePair<ItemKind, int>)))
+                game.ContractItems[legacyItem.Key] = Math.Min(game.LevelProgress, legacyItem.Value);
+            game.LevelProgress = game.ContractItems.Values.Sum();
+        }
         game.LastIncome = data.LastIncome; game.LastSales = data.LastSales ?? "";
         return game;
     }
@@ -169,7 +275,7 @@ sealed class FactoryGame
         map.Clear(); generatedChunks.Clear(); buildings.Clear();
         Seed = RandomNumberGenerator.GetInt32(100_000, 1_000_000);
         EnsureChunkGenerated(0, 0);
-        Money = 250; Delivered = 0; Tick = 0; Level = 1; LevelProgress = 0; LastIncome = 0; LastSales = "";
+        Money = 250; Delivered = 0; Tick = 0; Level = 1; LevelProgress = 0; ContractItems.Clear(); ContractFluids.Clear(); LastIncome = 0; LastSales = "";
     }
 
     public void EnsureChunkGenerated(int chunkX, int chunkY)
@@ -195,12 +301,25 @@ sealed class FactoryGame
         Shuffle(ores, random);
         for (var i = 0; i < veins.Count; i++) map[veins[i]] = new Tile { Kind = ores[i] };
 
+        var tinSite = candidates.FirstOrDefault(point => !map.ContainsKey(point)
+            && veins.All(vein => Math.Abs(vein.x - point.x) + Math.Abs(vein.y - point.y) >= 2));
+        if (tinSite != default) map[tinSite] = new Tile { Kind = TileKind.TinDeposit };
+
+        var oilSite = candidates.FirstOrDefault(point => !map.ContainsKey(point)
+            && veins.All(vein => Math.Abs(vein.x - point.x) + Math.Abs(vein.y - point.y) >= 2));
+        if (oilSite != default) map[oilSite] = new Tile { Kind = TileKind.OilDeposit };
+        var rubberSite = candidates.FirstOrDefault(point => !map.ContainsKey(point)
+            && veins.All(vein => Math.Abs(vein.x - point.x) + Math.Abs(vein.y - point.y) >= 2)
+            && (oilSite == default || Math.Abs(oilSite.x - point.x) + Math.Abs(oilSite.y - point.y) >= 3));
+        if (rubberSite != default) map[rubberSite] = new Tile { Kind = TileKind.RubberTree };
+
         var rocks = (from x in Enumerable.Range(1, 12) from y in Enumerable.Range(0, Height)
             select (x: chunkX * Width + x, y: chunkY * Height + y))
             .Where(p => !map.ContainsKey(p)
                 && veins.All(v => Math.Abs(v.x - p.x) + Math.Abs(v.y - p.y) > 1)).ToList();
         Shuffle(rocks, random);
-        foreach (var point in rocks.Take(9)) map[point] = new Tile { Kind = TileKind.Rock };
+        foreach (var point in rocks.Take(7)) map[point] = new Tile { Kind = TileKind.Rock };
+        foreach (var point in rocks.Skip(7).Take(7)) map[point] = new Tile { Kind = TileKind.Tree };
     }
 
     public Tile At(int x, int y)
@@ -210,36 +329,58 @@ sealed class FactoryGame
     }
     static readonly Tile Empty = new();
 
-    public string Build(string kind, int x, int y, ItemKind ore, Direction direction, string recipeId)
+    public string Build(string kind, int x, int y, ItemKind ore, Direction direction, string recipeId, string fluidRecipeId)
     {
         var tile = At(x, y); if (tile.Kind != TileKind.Empty) return $"Locul ({x}, {y}) este ocupat: {KindName(tile.Kind)}.";
         var recipe = kind == "machine" ? RecipeBook.ById(recipeId) : null;
-        if (recipe is not null && recipe.Level > Level) return $"Rețeta «{recipe.Name}» se deblochează la nivelul {recipe.Level}.";
-        var cost = kind switch { "miner" => 25, "belt" => 2, "machine" => recipe!.Machine == TileKind.Smelter ? 30 : 45, "ship" => 120, _ => 0 };
+        var fluidRecipe = kind == "fluid_machine" ? FluidRecipeBook.ById(fluidRecipeId) : null;
+        var cost = kind switch
+        {
+            "miner" => 25, "belt" => 2, "pipe" => 2, "pump" => 90, "latex_collector" => 80, "machine" => RecipeBook.BuildCost(recipe!),
+            "fluid_machine" => fluidRecipe!.Machine == TileKind.Distillery ? 70 : fluidRecipe.Machine == TileKind.ChemicalReactor ? 90 : 100,
+            "ship" => 120, _ => 0
+        };
         if (cost == 0) return "Clădire necunoscută.";
         if (kind == "miner")
         {
-            var deposit = ore == ItemKind.IronOre ? TileKind.IronDeposit : TileKind.CopperDeposit;
+            var deposit = ore switch
+            {
+                ItemKind.IronOre => TileKind.IronDeposit,
+                ItemKind.CopperOre => TileKind.CopperDeposit,
+                _ => TileKind.TinDeposit
+            };
             if (!Neighbors(x, y).Any(p => At(p.x, p.y).Kind == deposit)) return "Minerul trebuie pus lângă zăcământul potrivit.";
         }
+        if (kind == "pump" && !Neighbors(x, y).Any(p => At(p.x, p.y).Kind == TileKind.OilDeposit))
+            return "Pompa trebuie construită lângă un zăcământ de petrol.";
+        if (kind == "latex_collector" && !Neighbors(x, y).Any(p => At(p.x, p.y).Kind == TileKind.RubberTree))
+            return "Colectorul de latex trebuie construit lângă un arbore de cauciuc.";
         if (Money < cost) return $"Fonduri insuficiente. Costul este ${cost}.";
         Money -= cost;
-        tile = new Tile { Kind = kind switch { "miner" => TileKind.Miner, "belt" => TileKind.Belt, "machine" => recipe!.Machine, "ship" => TileKind.Ship, _ => TileKind.Empty } };
+        tile = new Tile { Kind = kind switch
+        {
+            "miner" => TileKind.Miner, "belt" => TileKind.Belt, "pipe" => TileKind.Pipe, "pump" => TileKind.OilPump, "latex_collector" => TileKind.LatexCollector,
+            "machine" => recipe!.Machine, "fluid_machine" => fluidRecipe!.Machine, "ship" => TileKind.Ship, _ => TileKind.Empty
+        } };
         if (kind == "miner") tile.Ore = ore;
-        if (kind == "belt") tile.Direction = direction;
+        if (kind is "belt" or "pipe" or "pump" or "latex_collector") tile.Direction = direction;
         if (kind == "machine") tile.RecipeId = recipe!.Id;
+        if (kind == "fluid_machine") tile.FluidRecipeId = fluidRecipe!.Id;
         if (kind == "ship") tile.PlayerBuilt = true;
         map[(x, y)] = tile;
         buildings.Add((x, y));
         if (kind == "ship") return $"Navă cargo nouă construită la ({x}, {y}).";
+        if (kind == "fluid_machine") return $"Construită {fluidRecipe!.MachineName} pentru {fluidRecipe.Name} la ({x}, {y}).";
+        if (kind == "pump") return $"Construită pompă de petrol la ({x}, {y}).";
+        if (kind == "latex_collector") return $"Construit colector de latex la ({x}, {y}).";
         return kind == "machine" ? $"Construit {recipe!.Name} la ({x}, {y})." : $"Construit: {KindName(tile.Kind)} la ({x}, {y}).";
     }
 
     public string Delete(int x, int y)
     {
         var tile = At(x, y);
-        if (tile.Kind is not (TileKind.Miner or TileKind.Belt or TileKind.Smelter or TileKind.Assembler) && !(tile.Kind == TileKind.Ship && tile.PlayerBuilt))
-            return tile.Kind == TileKind.Empty ? "Celula este deja liberă." : "Zăcămintele, bolovanii și nava inițială nu pot fi demolate.";
+        if (tile.Kind is not (TileKind.Miner or TileKind.Belt or TileKind.Pipe or TileKind.OilPump or TileKind.LatexCollector or TileKind.Smelter or TileKind.Assembler or TileKind.AlloySmelter or TileKind.RotorPress or TileKind.Distillery or TileKind.ChemicalReactor or TileKind.Polymerizer or TileKind.GlueMixer) && !(tile.Kind == TileKind.Ship && tile.PlayerBuilt))
+            return tile.Kind == TileKind.Empty ? "Celula este deja liberă." : "Zăcămintele, bolovanii, copacii și nava inițială nu pot fi demolate.";
         var name = KindName(tile.Kind);
         map.Remove((x, y));
         buildings.Remove((x, y));
@@ -257,7 +398,7 @@ sealed class FactoryGame
             var (nx, ny) = Next(coords.x, coords.y, belt.Direction);
             var dest = At(nx, ny);
             if (dest.Kind == TileKind.Belt && dest.BeltItem is null) moves.Add((belt, dest, item, false));
-            else if ((dest.Kind is TileKind.Smelter or TileKind.Assembler) && dest.InstalledRecipe is { } inputRecipe && inputRecipe.Inputs.ContainsKey(item)) moves.Add((belt, dest, item, false));
+            else if (dest.InstalledRecipe is { } inputRecipe && inputRecipe.Inputs.ContainsKey(item)) moves.Add((belt, dest, item, false));
             else if (dest.Kind == TileKind.Ship && RecipeBook.ForOutput(item) is not null) moves.Add((belt, dest, item, true));
         }
         foreach (var move in moves)
@@ -268,9 +409,7 @@ sealed class FactoryGame
             if (move.Ship)
             {
                 var shippedRecipe = RecipeBook.ForOutput(move.Item)!;
-                Delivered++; Money += shippedRecipe.Reward; LastIncome += shippedRecipe.Reward; sales.Add(shippedRecipe.Name);
-                if (shippedRecipe.Level == Level && Level < MaxLevel && ++LevelProgress >= DeliveriesPerLevel)
-                { Level++; LevelProgress = 0; }
+                RegisterDelivery(move.Item, null, shippedRecipe.Reward, shippedRecipe.Name, sales);
             }
             else if (move.To.Kind == TileKind.Belt) move.To.BeltItem = move.Item;
             else Add(move.To.Stock, move.Item);
@@ -279,10 +418,17 @@ sealed class FactoryGame
         {
             if (!map.TryGetValue(coords, out var tile)) continue;
             if (tile.Kind == TileKind.Miner && ++tile.Progress >= 2) { tile.Progress = 0; Add(tile.Output, tile.Ore!.Value); }
-            else if ((tile.Kind is TileKind.Smelter or TileKind.Assembler) && tile.InstalledRecipe is { } recipe)
+            else if (tile.InstalledRecipe is { } recipe
+                && (recipe.FluidProduct is null || tile.FluidOutput is null))
             {
-                if (recipe.Inputs.All(input => tile.Stock.GetValueOrDefault(input.Key) >= input.Value))
-                { foreach (var input in recipe.Inputs) for (var i = 0; i < input.Value; i++) Take(tile.Stock, input.Key); Add(tile.Output, recipe.Output); }
+                if (recipe.Inputs.All(input => tile.Stock.GetValueOrDefault(input.Key) >= input.Value)
+                    && recipe.FluidInputs.All(input => tile.FluidStock.GetValueOrDefault(input.Key) >= input.Value))
+                {
+                    foreach (var input in recipe.Inputs) for (var i = 0; i < input.Value; i++) Take(tile.Stock, input.Key);
+                    foreach (var input in recipe.FluidInputs) for (var i = 0; i < input.Value; i++) Take(tile.FluidStock, input.Key);
+                    if (recipe.FluidProduct is { } fluidProduct) tile.FluidOutput = fluidProduct;
+                    else if (recipe.Output is { } itemProduct) Add(tile.Output, itemProduct);
+                }
             }
             if (tile.Output.Count == 0) continue;
             var itemToSend = tile.Output.First().Key;
@@ -296,11 +442,116 @@ sealed class FactoryGame
                 { belt.BeltItem = itemToSend; Take(tile.Output, itemToSend); break; }
             }
         }
+        AdvanceFluids(sales);
         LastSales = string.Join(", ", sales);
+    }
+
+    void AdvanceFluids(List<string> sales)
+    {
+        var moves = new List<(Tile From, Tile To, FluidKind Fluid, bool Ship)>();
+        foreach (var coords in buildings.ToArray())
+        {
+            if (!map.TryGetValue(coords, out var pipe) || pipe.Kind != TileKind.Pipe || pipe.PipeFluid is not { } fluid) continue;
+            var (nx, ny) = Next(coords.x, coords.y, pipe.Direction);
+            var destination = At(nx, ny);
+            if (destination.Kind == TileKind.Pipe && destination.PipeFluid is null)
+                moves.Add((pipe, destination, fluid, false));
+            else if (destination.InstalledFluidRecipe is { } recipe && recipe.Input == fluid && destination.FluidInput is null)
+                moves.Add((pipe, destination, fluid, false));
+            else if (destination.InstalledRecipe is { } solidRecipe
+                && solidRecipe.FluidInputs.ContainsKey(fluid)
+                && destination.FluidStock.GetValueOrDefault(fluid) < solidRecipe.FluidInputs[fluid])
+                moves.Add((pipe, destination, fluid, false));
+            else if (destination.Kind == TileKind.Ship && FluidRecipeBook.SaleValue(fluid) > 0)
+                moves.Add((pipe, destination, fluid, true));
+        }
+
+        foreach (var move in moves)
+        {
+            if (move.From.PipeFluid != move.Fluid) continue;
+            if (move.Ship)
+            {
+                move.From.PipeFluid = null;
+                var reward = FluidRecipeBook.SaleValue(move.Fluid);
+                RegisterDelivery(null, move.Fluid, reward, FluidRecipeBook.Name(move.Fluid), sales);
+            }
+            else if (move.To.Kind == TileKind.Pipe && move.To.PipeFluid is null)
+            {
+                move.From.PipeFluid = null; move.To.PipeFluid = move.Fluid;
+            }
+            else if (move.To.InstalledFluidRecipe is not null && move.To.FluidInput is null)
+            {
+                move.From.PipeFluid = null; move.To.FluidInput = move.Fluid;
+            }
+            else if (move.To.InstalledRecipe is { } solidRecipe
+                && solidRecipe.FluidInputs.ContainsKey(move.Fluid)
+                && move.To.FluidStock.GetValueOrDefault(move.Fluid) < solidRecipe.FluidInputs[move.Fluid])
+            {
+                move.From.PipeFluid = null;
+                move.To.FluidStock[move.Fluid] = move.To.FluidStock.GetValueOrDefault(move.Fluid) + 1;
+            }
+        }
+
+        foreach (var coords in buildings.ToArray())
+        {
+            if (!map.TryGetValue(coords, out var pump) || pump.Kind is not (TileKind.OilPump or TileKind.LatexCollector)) continue;
+            var (nx, ny) = Next(coords.x, coords.y, pump.Direction);
+            var pipe = At(nx, ny);
+            if (pipe.Kind == TileKind.Pipe && pipe.PipeFluid is null)
+                pipe.PipeFluid = pump.Kind == TileKind.OilPump ? FluidKind.Petroleum : FluidKind.Latex;
+        }
+
+        foreach (var coords in buildings.ToArray())
+        {
+            if (!map.TryGetValue(coords, out var machine)) continue;
+            if (machine.InstalledRecipe is { FluidProduct: not null } && machine.FluidOutput is { } smeltOutput)
+            {
+                foreach (var (px, py) in Neighbors(coords.x, coords.y))
+                {
+                    var pipe = At(px, py);
+                    if (pipe.Kind != TileKind.Pipe || pipe.PipeFluid is not null || Next(px, py, pipe.Direction) == coords) continue;
+                    pipe.PipeFluid = smeltOutput; machine.FluidOutput = null; break;
+                }
+            }
+            if (machine.InstalledFluidRecipe is not { } recipe) continue;
+            if (machine.FluidOutput is { } output)
+            {
+                foreach (var (px, py) in Neighbors(coords.x, coords.y))
+                {
+                    var pipe = At(px, py);
+                    if (pipe.Kind != TileKind.Pipe || pipe.PipeFluid is not null || Next(px, py, pipe.Direction) == coords) continue;
+                    pipe.PipeFluid = output; machine.FluidOutput = null; break;
+                }
+            }
+            if (machine.FluidOutput is null && machine.FluidInput == recipe.Input)
+            {
+                machine.FluidInput = null;
+                machine.FluidOutput = recipe.Output;
+            }
+        }
+    }
+
+    void RegisterDelivery(ItemKind? item, FluidKind? fluid, int reward, string name, List<string> sales)
+    {
+        Delivered++; Money += reward; LastIncome += reward; sales.Add(name);
+        if (Level >= MaxLevel) return;
+        var contract = CurrentContract;
+        if (item is { } deliveredItem && contract.Items.TryGetValue(deliveredItem, out var itemTarget))
+            ContractItems[deliveredItem] = Math.Min(itemTarget, ContractItems.GetValueOrDefault(deliveredItem) + 1);
+        if (fluid is { } deliveredFluid && contract.Fluids.TryGetValue(deliveredFluid, out var fluidTarget))
+            ContractFluids[deliveredFluid] = Math.Min(fluidTarget, ContractFluids.GetValueOrDefault(deliveredFluid) + 1);
+        LevelProgress = ContractItems.Values.Sum() + ContractFluids.Values.Sum();
+        if (LevelProgress >= contract.Total)
+        {
+            Level++;
+            ContractItems.Clear(); ContractFluids.Clear(); LevelProgress = 0;
+        }
     }
 
     static bool Take(Dictionary<ItemKind, int> stock, ItemKind item)
     { if (stock.GetValueOrDefault(item) <= 0) return false; stock[item]--; if (stock[item] == 0) stock.Remove(item); return true; }
+    static bool Take(Dictionary<FluidKind, int> stock, FluidKind fluid)
+    { if (stock.GetValueOrDefault(fluid) <= 0) return false; stock[fluid]--; if (stock[fluid] == 0) stock.Remove(fluid); return true; }
     static void Add(Dictionary<ItemKind, int> stock, ItemKind item) => stock[item] = stock.GetValueOrDefault(item) + 1;
     static void Shuffle<T>(IList<T> items, Random random)
     { for (var i = items.Count - 1; i > 0; i--) { var j = random.Next(i + 1); (items[i], items[j]) = (items[j], items[i]); } }
@@ -311,7 +562,12 @@ sealed class FactoryGame
     static string KindName(TileKind kind) => kind switch
     {
         TileKind.IronDeposit => "zăcământ de fier", TileKind.CopperDeposit => "zăcământ de cupru", TileKind.Rock => "bolovan",
-        TileKind.Miner => "miner", TileKind.Belt => "bandă", TileKind.Smelter => "topitor", TileKind.Assembler => "asamblor", TileKind.Ship => "navă cargo", _ => "loc liber"
+        TileKind.TinDeposit => "zăcământ de staniu", TileKind.Tree => "copac",
+        TileKind.Miner => "miner", TileKind.Belt => "bandă", TileKind.Smelter => "topitor", TileKind.Assembler => "asamblor",
+        TileKind.AlloySmelter => "topitor de aliaje", TileKind.RotorPress => "Rotor Press", TileKind.Ship => "navă cargo",
+        TileKind.OilDeposit => "zăcământ de petrol", TileKind.Pipe => "țeavă", TileKind.OilPump => "pompă de petrol",
+        TileKind.RubberTree => "arbore de cauciuc", TileKind.LatexCollector => "colector de latex",
+        TileKind.Distillery => "distilerie", TileKind.ChemicalReactor => "reactor chimic", TileKind.Polymerizer => "polimerizator", TileKind.GlueMixer => "malaxor de lipici", _ => "loc liber"
     };
 }
 
@@ -421,6 +677,8 @@ sealed class DesktopGame
     readonly Dictionary<(int x, int y), IntPtr> cellOverlays = new();
     readonly Dictionary<(int x, int y), IntPtr> beltItemImages = new();
     readonly Dictionary<(int x, int y), ItemKind> beltItemKinds = new();
+    readonly Dictionary<(int x, int y), IntPtr> pipeFluidImages = new();
+    readonly Dictionary<(int x, int y), FluidKind> pipeFluidKinds = new();
     readonly Dictionary<(int x, int y), string[]> cellSpriteFrames = new();
     readonly Dictionary<(int x, int y), int> cellSpriteFrameIndices = new();
     readonly Dictionary<IntPtr, (double width, double height)> responsiveSizes = new();
@@ -445,11 +703,12 @@ sealed class DesktopGame
     bool extendingWorld, centerPending, scrollRestorePending, restoringAdjustments;
     double pendingScrollX, pendingScrollY;
     double cameraWorldX, cameraWorldY;
-    IntPtr optionsMiner, optionsBelt, oreIronButton, oreCopperButton, recipeNameLabel, recipeDetailsLabel, recipeCountLabel, recipeUnlockLabel, machineBuildButton;
+    IntPtr optionsMiner, optionsBelt, directionHeading, oreIronButton, oreCopperButton, oreTinButton;
     string? mode;
     ItemKind ore = ItemKind.IronOre;
     Direction direction = Direction.East;
-    int selectedRecipeIndex;
+    string selectedRecipeId = RecipeBook.All[0].Id;
+    string selectedFluidRecipeId = FluidRecipeBook.All[0].Id;
     IntPtr autoButton;
     uint timerId;
     string? activeSavePath, activeSaveName, pendingRenamePath;
@@ -483,6 +742,8 @@ sealed class DesktopGame
         Append(headingText, Label("Meniu principal · gestionează salvările fabricii", "title"));
         GtkNative.gtk_widget_set_hexpand(headingText, true); Append(heading, headingText);
         musicToggleButton = Button(""); Connect(musicToggleButton, ToggleMusic); UpdateMusicButton(); Append(heading, musicToggleButton);
+        var exit = Button("⏻  Ieși pe desktop", "danger");
+        Connect(exit, () => GtkNative.gtk_window_close(window)); Append(heading, exit);
         Append(root, heading);
 
         var createCard = Box(1, 1); GtkNative.gtk_widget_add_css_class(createCard, "card");
@@ -615,13 +876,14 @@ sealed class DesktopGame
         viewActions.Clear(); buildButtons.Clear(); cells.Clear(); cellImages.Clear();
         responsiveSizes.Clear(); responsiveGaps.Clear(); responsiveMargins.Clear();
         pressedMovementKeys.Clear(); scrollRestorePending = false; restoringAdjustments = false;
-        cellOverlays.Clear(); beltItemImages.Clear(); beltItemKinds.Clear();
+        cellOverlays.Clear(); beltItemImages.Clear(); beltItemKinds.Clear(); pipeFluidImages.Clear(); pipeFluidKinds.Clear();
         cellSpriteFrames.Clear(); cellSpriteFrameIndices.Clear();
         if (spriteTimerId != 0) { GtkNative.g_source_remove(spriteTimerId); spriteTimerId = 0; }
         if (resizeTimerId != 0) { GtkNative.g_source_remove(resizeTimerId); resizeTimerId = 0; }
         if (scrollRestoreTimerId != 0) { GtkNative.g_source_remove(scrollRestoreTimerId); scrollRestoreTimerId = 0; }
         mapGrid = mapScroll = horizontalAdjustment = verticalAdjustment = IntPtr.Zero;
         statusLabel = saveNameEntry = menuStatusLabel = saveListBox = IntPtr.Zero;
+        directionHeading = IntPtr.Zero;
         musicToggleButton = IntPtr.Zero;
     }
 
@@ -725,6 +987,7 @@ sealed class DesktopGame
             window { background: #111715; color: #eff3ea; font-family: "DejaVu Sans", sans-serif; }
             label { color: #e9eee5; }
             .muted { color: #8e9a90; font-size: 78%; }
+            .book-entry { color: #ccd5ca; font-size: 78%; padding: 1%; }
             .title { font-size: 130%; font-weight: bold; }
             .brand { color: #b8e068; font-size: 140%; font-weight: bold; }
             .card { background: #1a231f; border: none; border-radius: 2%; padding: 1%; }
@@ -735,6 +998,7 @@ sealed class DesktopGame
             button:hover { background: #30402f; border-color: #89a65a; }
             button.suggested-action { background: #3a502d; color: #eef6df; border-color: #799a4b; font-weight: bold; }
             button.tool { padding: 1.5%; }
+            button.building-choice { min-height: 0; padding: 5%; font-size: 75%; }
             button.selected { background: #35462b; border-color: #b8e068; color: #dff2b5; }
             button.danger { color: #efb1a4; }
             button.danger.selected { background: #552e2b; border-color: #db7766; color: #ffe2dc; }
@@ -742,10 +1006,22 @@ sealed class DesktopGame
             button.tile.empty { background: #2b3c2c; border-color: #344735; color: #9cae8e; }
             button.tile.iron { background: #404a43; border-color: #68756c; color: #e0e6dc; }
             button.tile.copper { background: #583e2b; border-color: #a8754c; color: #f0bb87; }
+            button.tile.tin { background: #495155; border-color: #a4b5b8; color: #e1eff0; }
+            button.tile.tree { background: #304a35; border-color: #78a568; color: #c5e9a8; }
+            button.tile.oil { background: #40323b; border-color: #a66e6d; color: #f2bb94; }
+            button.tile.rubber-tree { background: #304a35; border-color: #78a568; color: #c5e9a8; }
+            button.tile.latex-collector { background: #45533b; border-color: #a5bc70; color: #d9e9ac; }
             button.tile.rock { background: #303833; border-color: #48534b; color: #839087; }
             button.tile.miner { background: #35482b; border-color: #8bb35b; color: #d2ee9b; }
             button.tile.belt { background: #37423a; color: #e5ece0; font-size: 105%; }
+            button.tile.pipe { background: #293d45; color: #b9e5e8; font-size: 105%; }
+            button.tile.pump { background: #55432c; color: #f4d28e; }
+            button.tile.fluid-machine { background: #29434a; color: #b0e8de; }
             button.tile.smelter { background: #513e2d; border-color: #bd8953; color: #f2bb7c; }
+            button.tile.alloy-smelter { background: #584b33; border-color: #c5a65b; color: #f4d88b; }
+            button.tile.rotor-press { background: #344552; border-color: #83a5b4; color: #c3e1ef; }
+            button.tile.alloy-smelter { background: #584b33; border-color: #c5a65b; color: #f4d88b; }
+            button.tile.rotor-press { background: #344552; border-color: #83a5b4; color: #c3e1ef; }
             button.tile.assembler { background: #304252; border-color: #6c9db3; color: #b4e1f2; }
             button.tile.ship { background: #455338; border-color: #b1ce70; color: #e2f7a9; }
             button.tile.busy { color: #d8b76b; }
@@ -785,7 +1061,7 @@ sealed class DesktopGame
         var row = Box(0, 1);
         Append(row, Metric("BUGET", out moneyLabel)); Append(row, Metric("NIVEL", out levelLabel)); Append(row, Metric("TURĂ", out tickLabel));
         var contract = Box(1, 0.6); GtkNative.gtk_widget_add_css_class(contract, "metric"); GtkNative.gtk_widget_set_hexpand(contract, true);
-        progressHeadingLabel = Label("", "muted"); Append(contract, progressHeadingLabel);
+        progressHeadingLabel = Label("", "muted"); GtkNative.gtk_label_set_wrap(progressHeadingLabel, true); GtkNative.gtk_label_set_xalign(progressHeadingLabel, 0); Append(contract, progressHeadingLabel);
         var status = Box(0, 1.2); deliveryLabel = Label("0 / 3", "value"); Append(status, deliveryLabel);
         progressBar = GtkNative.gtk_progress_bar_new(); GtkNative.gtk_widget_set_hexpand(progressBar, true); GtkNative.gtk_progress_bar_set_fraction(progressBar, 0); Append(status, progressBar); Append(contract, status); Append(row, contract);
         var controls = Box(0, 0.8);
@@ -851,6 +1127,7 @@ sealed class DesktopGame
         foreach (var button in cells.Values) Actions.Remove(button);
         cellImages.Clear();
         cellOverlays.Clear(); beltItemImages.Clear(); beltItemKinds.Clear();
+        pipeFluidImages.Clear(); pipeFluidKinds.Clear();
         cellSpriteFrames.Clear(); cellSpriteFrameIndices.Clear();
         if (spriteTimerId != 0) { GtkNative.g_source_remove(spriteTimerId); spriteTimerId = 0; }
         minChunkX = -1; minChunkY = -1; maxChunkX = 1; maxChunkY = 1; cells.Clear();
@@ -1032,6 +1309,11 @@ sealed class DesktopGame
                 GtkNative.gtk_widget_set_size_request(itemImage, iconSize, iconSize);
                 ApplyBeltItemMotion(point, itemImage);
             }
+            if (pipeFluidImages.ContainsKey(point))
+            {
+                var fluidIconSize = (int)Math.Round(tileSize * .64);
+                GtkNative.gtk_widget_set_size_request(pipeFluidImages[point], fluidIconSize, fluidIconSize);
+            }
         }
 
         pendingScrollX = horizontalTile * tileSize;
@@ -1061,6 +1343,7 @@ sealed class DesktopGame
             Actions.Remove(button);
             cellImages.Remove(point);
             cellOverlays.Remove(point); beltItemImages.Remove(point); beltItemKinds.Remove(point);
+            pipeFluidImages.Remove(point); pipeFluidKinds.Remove(point);
             cellSpriteFrames.Remove(point); cellSpriteFrameIndices.Remove(point);
             GtkNative.gtk_grid_remove(mapGrid, button);
         }
@@ -1070,35 +1353,73 @@ sealed class DesktopGame
     IntPtr BuildSidebar()
     {
         var side = Box(1, 1.2); RequestResponsiveSize(side, 18);
-        var tools = Box(1, 0.8); GtkNative.gtk_widget_add_css_class(tools, "card");
-        Append(tools, Label("TRUSA DE LUCRU", "accent muted")); Append(tools, Label("Construcții", "title"));
-        AddTool(tools, "⛏ Miner · $25", "miner"); AddTool(tools, "➜ Bandă · $2", "belt");
-        AddTool(tools, "⌫   Demolează", "delete", "danger");
-        AddTool(tools, "🚀 Navă cargo · $120", "ship");
+        var buildingCard = Box(1, 0.7); GtkNative.gtk_widget_add_css_class(buildingCard, "card");
+        Append(buildingCard, Label("CLĂDIRI", "accent muted"));
+        Append(buildingCard, Label("Alege și plasează", "title"));
+        var buildingGrid = GtkNative.gtk_grid_new();
+        GtkNative.gtk_grid_set_column_spacing(buildingGrid, 3);
+        GtkNative.gtk_grid_set_row_spacing(buildingGrid, 3);
+        GtkNative.gtk_widget_set_hexpand(buildingGrid, true);
+        Append(buildingCard, buildingGrid);
+        var choices = new List<(string label, string key, Action select)>();
+        choices.Add(("⛏ Miner · $25", "miner", () => SelectBuildMode("miner")));
+        choices.Add(("➜ Bandă · $2", "belt", () => SelectBuildMode("belt")));
+        choices.Add(("◉ Țeavă · $2", "pipe", () => SelectBuildMode("pipe")));
+        choices.Add(("⛽ Pompă · $90", "pump", () => SelectBuildMode("pump")));
+        choices.Add(("🌳 Colector latex · $80", "latex_collector", () => SelectBuildMode("latex_collector")));
+        choices.Add(("🚀 Navă cargo · $120", "ship", () => SelectBuildMode("ship")));
+        choices.Add(("⌫ Demolează", "delete", () => SelectBuildMode("delete")));
+        foreach (var recipe in RecipeBook.All)
+        {
+            var captured = recipe;
+            var machineCost = RecipeBook.BuildCost(recipe);
+            choices.Add(($"▦ {MachineName(recipe.Id)} · ${machineCost}", $"machine:{recipe.Id}", () =>
+            {
+                selectedRecipeId = captured.Id; mode = "machine"; RefreshToolSelection();
+                SetMessage($"Plasează {MachineName(captured.Id)} ({captured.Name}) pe un loc liber.");
+            }));
+        }
+        foreach (var recipe in FluidRecipeBook.All)
+        {
+            var captured = recipe;
+            var machineCost = recipe.Machine == TileKind.Distillery ? 70 : recipe.Machine == TileKind.ChemicalReactor ? 90 : 100;
+            choices.Add(($"⚗ {recipe.MachineName} · ${machineCost}", $"fluid_machine:{recipe.Id}", () =>
+            {
+                selectedFluidRecipeId = captured.Id; mode = "fluid_machine"; RefreshToolSelection();
+                SetMessage($"Plasează {captured.MachineName} pentru rețeta {captured.Name}.");
+            }));
+        }
+        for (var i = 0; i < choices.Count; i++)
+        {
+            var choice = choices[i]; var button = Button(choice.label, "tool building-choice");
+            GtkNative.gtk_widget_set_hexpand(button, true);
+            var buttonLabel = GtkNative.gtk_widget_get_first_child(button);
+            if (buttonLabel != IntPtr.Zero) { GtkNative.gtk_label_set_wrap(buttonLabel, true); GtkNative.gtk_label_set_xalign(buttonLabel, .5f); }
+            buildButtons[choice.key] = button;
+            Connect(button, choice.select);
+            GtkNative.gtk_grid_attach(buildingGrid, button, i % 2, i / 2, 1, 1);
+        }
+        Append(side, buildingCard);
+
         optionsMiner = Box(1, 0.5); GtkNative.gtk_widget_set_visible(optionsMiner, false);
         Append(optionsMiner, Label("TIPUL MINEREULUI", "muted")); var ores = Box(0, 0.6);
-        oreIronButton = Button("Fe · Fier"); oreCopperButton = Button("Cu · Cupru");
+        oreIronButton = Button("Fe · Fier"); oreCopperButton = Button("Cu · Cupru"); oreTinButton = Button("Sn · Staniu");
         Connect(oreIronButton, () => { ore = ItemKind.IronOre; SetOptionSelection(); }); Connect(oreCopperButton, () => { ore = ItemKind.CopperOre; SetOptionSelection(); });
-        Append(ores, oreIronButton); Append(ores, oreCopperButton); Append(optionsMiner, ores); Append(tools, optionsMiner);
-        optionsBelt = Box(1, 0.5); GtkNative.gtk_widget_set_visible(optionsBelt, false); Append(optionsBelt, Label("DIRECȚIA BENZII", "muted"));
+        Connect(oreTinButton, () => { ore = ItemKind.TinOre; SetOptionSelection(); });
+        Append(ores, oreIronButton); Append(ores, oreCopperButton); Append(ores, oreTinButton); Append(optionsMiner, ores); Append(side, optionsMiner);
+        optionsBelt = Box(1, 0.5); GtkNative.gtk_widget_set_visible(optionsBelt, false);
+        directionHeading = Label("DIRECȚIA FLUXULUI", "muted"); Append(optionsBelt, directionHeading);
         var dirs = Box(0, 0.6);
         foreach (var (glyph, dir) in new[] { ("↑", Direction.North), ("→", Direction.East), ("↓", Direction.South), ("←", Direction.West) })
         { var b = Button(glyph); Connect(b, () => { direction = dir; UpdateDirectionButtons(dirs); }); Append(dirs, b); }
-        Append(optionsBelt, dirs); Append(tools, optionsBelt);
-        var recipeCard = Box(1, 0.7); GtkNative.gtk_widget_add_css_class(recipeCard, "card");
-        Append(recipeCard, Label("LABORATOR DE REȚETE", "accent muted"));
-        var recipeNav = Box(0, 0.6); var previous = Button("◀"); recipeNameLabel = Label("", "title"); GtkNative.gtk_widget_set_hexpand(recipeNameLabel, true); GtkNative.gtk_label_set_xalign(recipeNameLabel, .5f);
-        var next = Button("▶"); Connect(previous, () => CycleRecipe(-1)); Connect(next, () => CycleRecipe(1));
-        Append(recipeNav, previous); Append(recipeNav, recipeNameLabel); Append(recipeNav, next); Append(recipeCard, recipeNav);
-        recipeCountLabel = Label("", "muted"); Append(recipeCard, recipeCountLabel);
-        recipeDetailsLabel = Label("", "muted"); GtkNative.gtk_label_set_wrap(recipeDetailsLabel, true); Append(recipeCard, recipeDetailsLabel);
-        recipeUnlockLabel = Label("", "muted"); GtkNative.gtk_label_set_wrap(recipeUnlockLabel, true); Append(recipeCard, recipeUnlockLabel);
-        machineBuildButton = Button("♨  Plasează utilajul", "tool"); buildButtons["machine"] = machineBuildButton;
-        Connect(machineBuildButton, () => { mode = mode == "machine" ? null : "machine"; RefreshToolSelection(); SetMessage(mode is null ? "Selectează o clădire sau inspectează harta." : "Plasează utilajul rețetei selectate pe un loc liber."); });
-        Append(recipeCard, machineBuildButton); Append(side, recipeCard); Append(side, tools);
+        Append(optionsBelt, dirs); Append(side, optionsBelt);
+        Append(side, BuildEncyclopedia());
+        var fluidHelp = Label("Țevile transportă fluide spre utilaje și nave. Colectorul trebuie pus lângă un arbore de cauciuc; pompa lângă petrol.", "muted");
+        GtkNative.gtk_label_set_wrap(fluidHelp, true); Append(side, fluidHelp);
+
         var mission = Box(1, 0.8); GtkNative.gtk_widget_add_css_class(mission, "card");
-        Append(mission, Label("✦  PROGRESUL FABRICII", "accent muted")); Append(mission, Label("10 niveluri · 10 rețete", "title"));
-        var missionText = Label("Toate produsele finite aduc venit când sunt livrate, indiferent de nivel. Pentru progres, livrează de 3 ori produsul cerut. Nave cargo noi: $120.", "muted"); GtkNative.gtk_label_set_wrap(missionText, true); Append(mission, missionText);
+        Append(mission, Label("✦  PROGRESUL FABRICII", "accent muted")); Append(mission, Label("12 niveluri · 16 rețete", "title"));
+        var missionText = Label("Livrează obiectivele afișate pentru nivel: produse solide pe benzi și fluide prin țevi către nave. Toate livrările aduc venit. Polietilena și lipiciul intră în rețeta cadrului. Nave cargo noi: $120.", "muted"); GtkNative.gtk_label_set_wrap(missionText, true); Append(mission, missionText);
         Append(side, mission);
         statusLabel = Label("Plasează un miner lângă un zăcământ ca să începi.", "muted"); GtkNative.gtk_label_set_wrap(statusLabel, true);
         var status = Box(0, 0.9); GtkNative.gtk_widget_add_css_class(status, "card"); Append(status, Label("⌁", "accent")); Append(status, statusLabel); Append(side, status);
@@ -1110,40 +1431,69 @@ sealed class DesktopGame
         return scroller;
     }
 
-    void AddTool(IntPtr parent, string label, string kind, string? css = null)
+    IntPtr BuildEncyclopedia()
     {
-        var button = Button(label, "tool"); if (css is not null) GtkNative.gtk_widget_add_css_class(button, css); buildButtons[kind] = button;
-        Connect(button, () => { mode = mode == kind ? null : kind; RefreshToolSelection(); SetMessage(mode is null ? "Selectează o clădire sau inspectează harta." : "Selectează un loc liber pe hartă pentru construcție."); }); Append(parent, button);
+        var card = Box(1, 0.45); GtkNative.gtk_widget_add_css_class(card, "card");
+        Append(card, Label("CARTEA FABRICII", "accent muted"));
+        Append(card, Label("Iteme, fluide și rețete", "title"));
+        Append(card, Label("ITEME", "accent muted"));
+        foreach (var item in Enum.GetValues<ItemKind>())
+        {
+            var producedBy = RecipeBook.All.FirstOrDefault(recipe => recipe.Output == item);
+            var usedBy = RecipeBook.All.Where(recipe => recipe.Inputs.ContainsKey(item)).Select(recipe => recipe.Name).ToArray();
+            var detail = producedBy is not null ? $"produs la: {MachineName(producedBy.Id)}" : "extras de miner";
+            if (usedBy.Length > 0) detail += $" · folosit la: {string.Join(", ", usedBy)}";
+            AppendBookEntry(card, $"{ItemName(item)} — {detail}");
+        }
+
+        Append(card, Label("FLUIDE", "accent muted"));
+        foreach (var fluid in Enum.GetValues<FluidKind>())
+        {
+            var producer = FluidRecipeBook.All.FirstOrDefault(recipe => recipe.Output == fluid);
+            var smelterProducer = RecipeBook.All.FirstOrDefault(recipe => recipe.FluidProduct == fluid);
+            var consumers = RecipeBook.All.Where(recipe => recipe.FluidInputs.ContainsKey(fluid)).Select(recipe => recipe.Name).ToArray();
+            var detail = producer is not null ? $"produs în {producer.MachineName} din {FluidName(producer.Input)}"
+                : smelterProducer is not null ? $"produs în {MachineName(smelterProducer.Id)} din {string.Join(" + ", smelterProducer.Inputs.Select(input => ItemName(input.Key)))}"
+                : fluid == FluidKind.Petroleum ? "extras de pompa de petrol"
+                : fluid == FluidKind.Latex ? "extras de colectorul de lângă arborele de cauciuc" : "fluid de producție";
+            if (consumers.Length > 0) detail += $" · folosit la: {string.Join(", ", consumers)}";
+            AppendBookEntry(card, $"{FluidName(fluid)} — {detail}");
+        }
+
+        Append(card, Label("REȚETE", "accent muted"));
+        foreach (var recipe in RecipeBook.All)
+        {
+            var inputs = string.Join(" + ", recipe.Inputs.Select(input => $"{input.Value}× {ItemName(input.Key)}")
+                .Concat(recipe.FluidInputs.Select(input => $"{input.Value}× {FluidName(input.Key)}")));
+            var output = recipe.FluidProduct is { } fluid ? FluidName(fluid)
+                : recipe.Output is { } item ? ItemName(item) : recipe.Product;
+            AppendBookEntry(card, $"Niv. {recipe.Level} · {MachineName(recipe.Id)}: {inputs} → {output}");
+        }
+        foreach (var recipe in FluidRecipeBook.All)
+            AppendBookEntry(card, $"{recipe.MachineName}: {FluidName(recipe.Input)} → {FluidName(recipe.Output)}");
+        return card;
     }
 
-    void CycleRecipe(int offset)
+    void AppendBookEntry(IntPtr parent, string text)
     {
-        var unlocked = game.UnlockedRecipes;
-        selectedRecipeIndex = (selectedRecipeIndex + offset + unlocked.Count) % unlocked.Count;
-        RefreshRecipePanel();
+        var entry = Label(text, "book-entry");
+        GtkNative.gtk_label_set_wrap(entry, true);
+        GtkNative.gtk_label_set_xalign(entry, 0);
+        Append(parent, entry);
     }
 
-    void RefreshRecipePanel()
+    void SelectBuildMode(string selectedMode)
     {
-        var unlocked = game.UnlockedRecipes;
-        selectedRecipeIndex = Math.Clamp(selectedRecipeIndex, 0, unlocked.Count - 1);
-        var recipe = unlocked[selectedRecipeIndex];
-        GtkNative.gtk_label_set_text(recipeNameLabel, recipe.Name);
-        GtkNative.gtk_label_set_text(recipeCountLabel, $"DEBLOCATE {unlocked.Count} / {RecipeBook.All.Length}  ·  NIVEL {game.Level}");
-        var ingredients = string.Join(" + ", recipe.Inputs.Select(i => $"{i.Value}× {ItemName(i.Key)}"));
-        GtkNative.gtk_label_set_text(recipeDetailsLabel, $"{ingredients}  →  {ItemName(recipe.Output)}  ·  vânzare ${recipe.Reward}");
-        var nextRecipe = RecipeBook.All.FirstOrDefault(r => r.Level == game.Level + 1);
-        GtkNative.gtk_label_set_text(recipeUnlockLabel, nextRecipe is null
-            ? "Toate rețetele sunt deblocate."
-            : $"Următoarea rețetă: {nextRecipe.Name} · Nivel {nextRecipe.Level}");
-        var machine = $"▦  {MachineName(recipe.Id)}";
-        var cost = recipe.Machine == TileKind.Smelter ? 30 : 45;
-        GtkNative.gtk_button_set_label(machineBuildButton, $"{machine} · ${cost}");
+        mode = mode == selectedMode ? null : selectedMode;
+        RefreshToolSelection();
+        SetMessage(mode is null ? "Selectează o clădire sau inspectează harta." : "Selectează un loc liber pe hartă pentru construcție.");
     }
 
     static string MachineName(string recipeId) => recipeId switch
     {
-        "iron_plate" => "Iron Smelter", "copper_plate" => "Copper Smelter",
+        "iron_plate" => "Iron Smelter", "copper_plate" => "Copper Smelter", "soldering_alloy" => "Tin Smelter",
+        "bronze" => "Alloy Smelter", "rotor" => "Rotor Press", "pump_component" => "Pump Assembler",
+        "mainframe" => "Mainframe Fabricator", "thruster" => "Thruster Fabricator",
         "copper_wire" => "Wiremill", "iron_gear" => "Gear Press",
         "circuit" => "Circuit Assembler", "frame" => "Extruder",
         "motor" => "Motor Assembler", "advanced_circuit" => "PCB Fabricator",
@@ -1153,35 +1503,64 @@ sealed class DesktopGame
 
     static string MachineSpriteFolder(string recipeId) => recipeId switch
     {
-        "iron_plate" => "iron_smelter", "copper_plate" => "copper_smelter",
+        "iron_plate" => "iron_smelter", "copper_plate" => "copper_smelter", "soldering_alloy" => "tin_smelter",
         "copper_wire" => "wiremill", "iron_gear" => "gear_press",
         "circuit" => "circuit_assembler", "frame" => "extruder",
         "motor" => "motor_assembler", "advanced_circuit" => "pcb_fabricator",
         "processor" => "processor_assembler", "rocket_part" => "rocket_fabricator",
+        "bronze" => "alloy_smelter", "rotor" => "rotor_press", "pump_component" => "pump_assembler",
+        "mainframe" => "mainframe_fabricator", "thruster" => "thruster_fabricator",
         _ => "assembler"
+    };
+
+    static string FluidMachineSpriteFolder(string recipeId) => recipeId switch
+    {
+        "petroleum_to_ethanol" => "distillery", "ethanol_to_ethylene" => "chemical_reactor",
+        "ethylene_to_polyethylene" => "polymerizer", "latex_to_glue" => "glue_mixer", _ => "chemical_reactor"
+    };
+
+    static string FluidName(FluidKind fluid) => fluid switch
+    {
+        FluidKind.Petroleum => "petrol", FluidKind.Ethanol => "etanol",
+        FluidKind.Ethylene => "etilenă", FluidKind.Polyethylene => "polietilenă", FluidKind.Latex => "latex",
+        FluidKind.Glue => "lipici", _ => "aliaj de lipit"
     };
 
     static string ItemName(ItemKind item) => item switch
     {
-        ItemKind.IronOre => "minereu de fier", ItemKind.CopperOre => "minereu de cupru",
+        ItemKind.IronOre => "minereu de fier", ItemKind.CopperOre => "minereu de cupru", ItemKind.TinOre => "minereu de staniu",
         ItemKind.IronPlate => "placă de fier", ItemKind.CopperPlate => "placă de cupru",
         ItemKind.CopperWire => "fir de cupru", ItemKind.Gear => "angrenaj", ItemKind.Circuit => "circuit",
         ItemKind.Frame => "cadru", ItemKind.Motor => "motor", ItemKind.AdvancedCircuit => "circuit avansat",
-        ItemKind.Processor => "procesor", _ => "piesă de rachetă"
+        ItemKind.Processor => "procesor", ItemKind.RocketPart => "piesă de rachetă",
+        ItemKind.Bronze => "bronz", ItemKind.Rotor => "rotor", ItemKind.Pump => "pump",
+        ItemKind.Mainframe => "mainframe", ItemKind.Thruster => "thruster", _ => "piesă de rachetă"
     };
+
+    static string FluidMachineStatus(Tile tile)
+    {
+        if (tile.FluidOutput is { } output) return $"așteaptă o țeavă liberă pentru {FluidName(output)}";
+        if (tile.FluidInput is { } input) return $"procesează {FluidName(input)}";
+        return "așteaptă fluid la intrare";
+    }
 
     void OnCell(int x, int y)
     {
         if (mode is null)
         {
-            var tile = game.At(x, y); var extra = tile.Stored > 0 ? $" · {tile.Stored} obiecte în așteptare" : "";
+            var tile = game.At(x, y); var extra = tile.Stored > 0 ? $" · {tile.Stored} unități în așteptare" : "";
             if (tile.InstalledRecipe is { } recipe)
                 extra += $" · Rețetă: {recipe.Name} · {MachineStatus(tile, recipe)}";
-            var name = tile.InstalledRecipe is { } installed ? MachineName(installed.Id) : TileName(tile.Kind);
+            if (tile.InstalledFluidRecipe is { } fluidRecipe)
+                extra += $" · {fluidRecipe.Name} · {FluidMachineStatus(tile)}";
+            if (tile.Kind == TileKind.Pipe)
+                extra += tile.PipeFluid is { } fluid ? $" · transportă {FluidName(fluid)}" : " · goală";
+            var name = tile.InstalledRecipe is { } installed ? MachineName(installed.Id)
+                : tile.InstalledFluidRecipe is { } chemical ? chemical.MachineName : TileName(tile.Kind);
             SetMessage($"{name} · coordonatele {x}, {y}{extra}"); return;
         }
         if (mode == "delete") SetMessage(game.Delete(x, y));
-        else SetMessage(game.Build(mode, x, y, ore, direction, game.UnlockedRecipes[selectedRecipeIndex].Id));
+        else SetMessage(game.Build(mode, x, y, ore, direction, selectedRecipeId, selectedFluidRecipeId));
         if (cells.TryGetValue((x, y), out var button)) RenderCell(x, y, button);
         Refresh();
     }
@@ -1191,22 +1570,27 @@ sealed class DesktopGame
         var oldLevel = game.Level;
         game.Advance();
         beltMotionProgress = 0;
-        RefreshLoadedBelts();
+        RefreshLoadedTransporters();
         Refresh();
         var saleMessage = game.LastIncome > 0 ? $"Vândut: {game.LastSales} · +${game.LastIncome}. " : "";
         SetMessage(saleMessage + (game.Level > oldLevel
             ? $"Nivel {game.Level}! Ai deblocat rețeta «{game.UnlockedRecipes[^1].Name}». Utilajele existente își păstrează rețetele."
-            : $"Tura {game.Tick} · {game.LevelProgress}/{FactoryGame.DeliveriesPerLevel} livrări până la următorul nivel."));
+            : $"Tura {game.Tick} · progres obiective {game.LevelProgress}/{Math.Max(1, game.CurrentContract.Total)}."));
     }
+
+    static string ContractDescription(DeliveryContract contract) => string.Join(" · ", contract.Items.Select(i => $"{i.Value}× {ItemName(i.Key)}").Concat(contract.Fluids.Select(i => $"{i.Value}× {FluidName(i.Key)}")));
 
     static string MachineStatus(Tile tile, FactoryRecipe recipe)
     {
         if (tile.Output.Count > 0) return "produsul așteaptă la ieșire";
+        if (tile.FluidOutput is { } output) return $"așteaptă o țeavă liberă pentru {FluidName(output)}";
         var missing = recipe.Inputs
             .Where(input => tile.Stock.GetValueOrDefault(input.Key) < input.Value)
             .Select(input => $"{input.Value - tile.Stock.GetValueOrDefault(input.Key)}× {ItemName(input.Key)}")
             .ToArray();
-        return missing.Length > 0 ? $"așteaptă {string.Join(", ", missing)}" : "gata de producție la următoarea tură";
+        var missingFluids = recipe.FluidInputs.Where(input => tile.FluidStock.GetValueOrDefault(input.Key) < input.Value).Select(input => $"{input.Value - tile.FluidStock.GetValueOrDefault(input.Key)}× {FluidName(input.Key)}");
+        var requirements = missing.Concat(missingFluids).ToArray();
+        return requirements.Length > 0 ? $"așteaptă {string.Join(", ", requirements)}" : "gata de producție la următoarea tură";
     }
 
     void ToggleAuto()
@@ -1275,13 +1659,11 @@ sealed class DesktopGame
         moneyLabelText();
         RefreshVisibleCells();
         GtkNative.gtk_label_set_text(levelLabel, game.Level.ToString("00"));
-        GtkNative.gtk_label_set_text(deliveryLabel, game.Level == FactoryGame.MaxLevel ? "MAX" : $"{game.LevelProgress} / {FactoryGame.DeliveriesPerLevel}");
-        var required = RecipeBook.All.FirstOrDefault(r => r.Level == game.Level);
-        GtkNative.gtk_label_set_text(progressHeadingLabel, required is null ? "TOATE REȚETELE DEBLOCATE" : $"LIVREAZĂ: {required.Name.ToUpperInvariant()}");
+        GtkNative.gtk_label_set_text(deliveryLabel, game.Level == FactoryGame.MaxLevel ? "MAX" : $"{game.LevelProgress} / {game.CurrentContract.Total}");
+        GtkNative.gtk_label_set_text(progressHeadingLabel, game.Level == FactoryGame.MaxLevel ? "TOATE REȚETELE DEBLOCATE" : $"OBIECTIVE NIVEL {game.Level}: {ContractDescription(game.CurrentContract)}");
         GtkNative.gtk_label_set_text(seedLabel, $"LUME INFINITĂ  ·  #{game.Seed}");
         GtkNative.gtk_label_set_text(worldNameLabel, activeSaveName ?? "Lume nouă");
-        GtkNative.gtk_progress_bar_set_fraction(progressBar, game.Level == FactoryGame.MaxLevel ? 1 : (double)game.LevelProgress / FactoryGame.DeliveriesPerLevel);
-        RefreshRecipePanel();
+        GtkNative.gtk_progress_bar_set_fraction(progressBar, game.Level == FactoryGame.MaxLevel ? 1 : (double)game.LevelProgress / Math.Max(1, game.CurrentContract.Total));
         RefreshToolSelection();
     }
 
@@ -1319,27 +1701,36 @@ sealed class DesktopGame
 
     }
 
-    void RefreshLoadedBelts()
+    void RefreshLoadedTransporters()
     {
         foreach (var (point, button) in cells.ToArray())
-            if (game.At(point.x, point.y).Kind == TileKind.Belt)
+            if (game.At(point.x, point.y).Kind is TileKind.Belt or TileKind.Pipe)
                 RenderCell(point.x, point.y, button);
     }
 
     void RenderCell(int x, int y, IntPtr button)
     {
         var tile = game.At(x, y);
-        var description = tile.InstalledRecipe is { } recipe
+        var description = tile.InstalledFluidRecipe is { } fluidRecipe
+            ? $"{fluidRecipe.MachineName} · {FluidMachineStatus(tile)}"
+            : tile.InstalledRecipe is { } recipe
             ? $"{MachineName(recipe.Id)} · produce {recipe.Product}"
-            : tile.Kind == TileKind.Belt
-                ? $"Bandă transportoare {Arrow(tile.Direction)}" + (tile.BeltItem is { } item ? $" · transportă {ItemName(item)}" : " · goală")
+            : tile.Kind is TileKind.Belt or TileKind.Pipe
+                ? $"{(tile.Kind == TileKind.Belt ? "Bandă" : "Țeavă")} {Arrow(tile.Direction)}" + (tile.Kind == TileKind.Belt
+                    ? tile.BeltItem is { } item ? $" · transportă {ItemName(item)}" : " · goală"
+                    : tile.PipeFluid is { } fluid ? $" · transportă {FluidName(fluid)}" : " · goală")
                 : TileName(tile.Kind);
         GtkNative.gtk_widget_set_tooltip_text(button, $"{description} · coordonatele {x}, {y}");
         var (label, css) = tile.Kind switch
         {
-            TileKind.Empty => ("", "empty"), TileKind.IronDeposit => ("Fe", "iron"), TileKind.CopperDeposit => ("Cu", "copper"), TileKind.Rock => ("◆", "rock"),
+            TileKind.Empty => ("", "empty"), TileKind.IronDeposit => ("Fe", "iron"), TileKind.CopperDeposit => ("Cu", "copper"),
+            TileKind.TinDeposit => ("Sn", "tin"), TileKind.Rock => ("◆", "rock"), TileKind.Tree => ("♣", "tree"),
+            TileKind.OilDeposit => ("Oil", "oil"), TileKind.RubberTree => ("🌳", "rubber-tree"), TileKind.LatexCollector => ("L", "latex-collector"),
             TileKind.Miner => ("⛏", "miner"), TileKind.Belt => (Arrow(tile.Direction), "belt"),
-            TileKind.Smelter or TileKind.Assembler => MachineLabel(tile), TileKind.Ship => ("🚀", "ship"), _ => ("", "empty")
+            TileKind.Pipe => (Arrow(tile.Direction), "pipe"), TileKind.OilPump => ("⛽", "pump"),
+            TileKind.Smelter or TileKind.Assembler or TileKind.AlloySmelter or TileKind.RotorPress => MachineLabel(tile),
+            TileKind.Distillery or TileKind.ChemicalReactor or TileKind.Polymerizer or TileKind.GlueMixer => ("⚗", "fluid-machine"),
+            TileKind.Ship => ("🚀", "ship"), _ => ("", "empty")
         };
         var frames = SpriteFrames(tile);
         if (frames.Length > 0)
@@ -1350,7 +1741,7 @@ sealed class DesktopGame
                 var image = GtkNative.gtk_picture_new_for_filename(frames[0]);
                 GtkNative.gtk_picture_set_can_shrink(image, true);
                 GtkNative.gtk_widget_set_size_request(image, (int)Math.Round(tileSize * .9), (int)Math.Round(tileSize * .9));
-                if (tile.Kind == TileKind.Belt)
+                if (tile.Kind is TileKind.Belt or TileKind.Pipe)
                 {
                     var overlay = GtkNative.gtk_overlay_new();
                     GtkNative.gtk_widget_set_hexpand(overlay, true);
@@ -1368,7 +1759,7 @@ sealed class DesktopGame
                     EnsureSpriteTimer();
                 }
             }
-            if (tile.Kind == TileKind.Belt)
+            if (tile.Kind is TileKind.Belt or TileKind.Pipe)
             {
                 var point = (x, y);
                 if (!cellOverlays.ContainsKey(point))
@@ -1383,13 +1774,15 @@ sealed class DesktopGame
                     GtkNative.gtk_button_set_child(button, overlay);
                     cellOverlays[point] = overlay;
                 }
-                UpdateBeltItemOverlay(point, tile.BeltItem);
+                if (tile.Kind == TileKind.Belt) UpdateBeltItemOverlay(point, tile.BeltItem);
+                else UpdatePipeFluidOverlay(point, tile.PipeFluid);
             }
         }
         else
         {
             if (cellImages.Remove((x, y))) GtkNative.gtk_button_set_child(button, IntPtr.Zero);
             cellOverlays.Remove((x, y)); beltItemImages.Remove((x, y)); beltItemKinds.Remove((x, y));
+            pipeFluidImages.Remove((x, y)); pipeFluidKinds.Remove((x, y));
             cellSpriteFrames.Remove((x, y)); cellSpriteFrameIndices.Remove((x, y));
             GtkNative.gtk_button_set_label(button, label);
             StopSpriteTimerIfIdle();
@@ -1423,6 +1816,40 @@ sealed class DesktopGame
         beltItemKinds[point] = kind;
         ApplyBeltItemMotion(point, picture);
         EnsureBeltMotionTimer();
+    }
+
+    void UpdatePipeFluidOverlay((int x, int y) point, FluidKind? fluid)
+    {
+        if (!cellOverlays.TryGetValue(point, out var overlay)) return;
+        if (fluid is null || pipeFluidKinds.GetValueOrDefault(point) != fluid.Value)
+        {
+            if (pipeFluidImages.Remove(point, out var previous)) GtkNative.gtk_overlay_remove_overlay(overlay, previous);
+            pipeFluidKinds.Remove(point);
+        }
+        if (fluid is not { } kind || pipeFluidImages.ContainsKey(point)) return;
+        var path = FluidSpritePath(kind);
+        if (!File.Exists(path)) return;
+        var picture = GtkNative.gtk_picture_new_for_filename(path);
+        GtkNative.gtk_picture_set_can_shrink(picture, true);
+        var iconSize = (int)Math.Round(tileSize * .64);
+        GtkNative.gtk_widget_set_size_request(picture, iconSize, iconSize);
+        GtkNative.gtk_widget_set_halign(picture, 3);
+        GtkNative.gtk_widget_set_valign(picture, 3);
+        GtkNative.gtk_widget_add_css_class(picture, "belt-item-texture");
+        GtkNative.gtk_overlay_add_overlay(overlay, picture);
+        pipeFluidImages[point] = picture;
+        pipeFluidKinds[point] = kind;
+    }
+
+    static string FluidSpritePath(FluidKind fluid)
+    {
+        var file = fluid switch
+        {
+            FluidKind.Petroleum => "petroleum", FluidKind.Ethanol => "ethanol",
+            FluidKind.Ethylene => "ethylene", FluidKind.Polyethylene => "polyethylene", FluidKind.Latex => "latex",
+            FluidKind.Glue => "glue", _ => "soldering_alloy"
+        };
+        return Path.Combine(AppContext.BaseDirectory, "asstets", "fluids", file + ".png");
     }
 
     void EnsureBeltMotionTimer()
@@ -1497,26 +1924,38 @@ sealed class DesktopGame
     {
         var file = item switch
         {
-            ItemKind.IronOre => "iron_ore", ItemKind.CopperOre => "copper_ore",
+            ItemKind.IronOre => "iron_ore", ItemKind.CopperOre => "copper_ore", ItemKind.TinOre => "tin_ore",
             ItemKind.IronPlate => "iron_plate", ItemKind.CopperPlate => "copper_plate",
             ItemKind.CopperWire => "copper_wire", ItemKind.Gear => "gear", ItemKind.Circuit => "circuit",
             ItemKind.Frame => "frame", ItemKind.Motor => "motor", ItemKind.AdvancedCircuit => "advanced_circuit",
-            ItemKind.Processor => "processor", _ => "rocket_part"
+            ItemKind.Processor => "processor", ItemKind.RocketPart => "rocket_part", ItemKind.Bronze => "bronze",
+            ItemKind.Rotor => "rotor", ItemKind.Pump => "pump", ItemKind.Mainframe => "mainframe", _ => "thruster"
         };
         return Path.Combine(AppContext.BaseDirectory, "asstets", "items", file + ".png");
     }
 
     static string[] SpriteFrames(Tile tile)
     {
-        var folder = tile.InstalledRecipe is { } recipe
-            ? MachineSpriteFolder(recipe.Id)
-            : tile.Kind switch
+        var folder = tile.InstalledFluidRecipe is { } fluidRecipe
+            ? FluidMachineSpriteFolder(fluidRecipe.Id)
+            : tile.InstalledRecipe is { } recipe
+                ? MachineSpriteFolder(recipe.Id)
+                : tile.Kind switch
         {
             TileKind.IronDeposit => "iron_deposit",
             TileKind.CopperDeposit => "copper_deposit",
+            TileKind.TinDeposit => "tin_deposit",
+            TileKind.Tree => "tree",
+            TileKind.OilDeposit => "oil_deposit",
             TileKind.Rock => "rock",
             TileKind.Miner => "miner",
             TileKind.Belt => $"belt_{tile.Direction.ToString().ToLowerInvariant()}",
+            TileKind.Pipe => $"pipe_{tile.Direction.ToString().ToLowerInvariant()}",
+            TileKind.OilPump => "oil_pump",
+            TileKind.RubberTree => "rubber_tree", TileKind.LatexCollector => "latex_collector", TileKind.GlueMixer => "glue_mixer",
+            TileKind.Distillery => "distillery",
+            TileKind.ChemicalReactor => "chemical_reactor",
+            TileKind.Polymerizer => "polymerizer",
             TileKind.Smelter => "smelter",
             TileKind.Assembler => "assembler",
             TileKind.Ship => "cargo_ship",
@@ -1561,10 +2000,11 @@ sealed class DesktopGame
         return 1;
     }
 
-    static (string label, string css) MachineLabel(Tile tile)
+    static (string label, string css) MachineLabel(Tile tile) => tile.Kind switch
     {
-        return (tile.Kind == TileKind.Smelter ? "♨" : "▦", tile.Kind == TileKind.Smelter ? "smelter" : "assembler");
-    }
+        TileKind.Smelter => ("♨", "smelter"), TileKind.AlloySmelter => ("♨", "alloy-smelter"),
+        TileKind.RotorPress => ("⚙", "rotor-press"), _ => ("▦", "assembler")
+    };
 
     void moneyLabelText()
     { GtkNative.gtk_label_set_text(moneyLabel, $"${game.Money}"); GtkNative.gtk_label_set_text(tickLabel, game.Tick.ToString("000")); }
@@ -1572,15 +2012,25 @@ sealed class DesktopGame
     void RefreshToolSelection()
     {
         foreach (var (kind, button) in buildButtons)
-        { if (kind == mode) GtkNative.gtk_widget_add_css_class(button, "selected"); else GtkNative.gtk_widget_remove_css_class(button, "selected"); }
-        GtkNative.gtk_widget_set_visible(optionsMiner, mode == "miner"); GtkNative.gtk_widget_set_visible(optionsBelt, mode == "belt");
+        {
+            var selected = kind == mode
+                || (mode == "machine" && kind == $"machine:{selectedRecipeId}")
+                || (mode == "fluid_machine" && kind == $"fluid_machine:{selectedFluidRecipeId}");
+            if (selected) GtkNative.gtk_widget_add_css_class(button, "selected");
+            else GtkNative.gtk_widget_remove_css_class(button, "selected");
+        }
+        GtkNative.gtk_widget_set_visible(optionsMiner, mode == "miner");
+        var hasDirection = mode is "belt" or "pipe" or "pump" or "latex_collector";
+        GtkNative.gtk_widget_set_visible(optionsBelt, hasDirection);
+        if (hasDirection && directionHeading != IntPtr.Zero)
+            GtkNative.gtk_label_set_text(directionHeading, mode == "belt" ? "DIRECȚIA BENZII" : mode == "pump" ? "IEȘIREA POMPEI" : mode == "latex_collector" ? "IEȘIREA COLECTORULUI" : "DIRECȚIA FLUXULUI");
         SetOptionSelection(); UpdateDirectionButtons(GtkNative.gtk_widget_get_first_child(optionsBelt) == IntPtr.Zero ? IntPtr.Zero : GtkNative.gtk_widget_get_next_sibling(GtkNative.gtk_widget_get_first_child(optionsBelt)));
     }
 
     void SetOptionSelection()
     {
-        if (ore == ItemKind.IronOre) { GtkNative.gtk_widget_add_css_class(oreIronButton, "selected"); GtkNative.gtk_widget_remove_css_class(oreCopperButton, "selected"); }
-        else { GtkNative.gtk_widget_add_css_class(oreCopperButton, "selected"); GtkNative.gtk_widget_remove_css_class(oreIronButton, "selected"); }
+        foreach (var (kind, button) in new[] { (ItemKind.IronOre, oreIronButton), (ItemKind.CopperOre, oreCopperButton), (ItemKind.TinOre, oreTinButton) })
+        { if (ore == kind) GtkNative.gtk_widget_add_css_class(button, "selected"); else GtkNative.gtk_widget_remove_css_class(button, "selected"); }
     }
 
     void UpdateDirectionButtons(IntPtr box)
@@ -1597,19 +2047,28 @@ sealed class DesktopGame
 
     static void SetCellStyle(IntPtr button, string css, bool busy)
     {
-        foreach (var name in new[] { "empty", "iron", "copper", "rock", "miner", "belt", "smelter", "assembler", "ship", "busy" }) GtkNative.gtk_widget_remove_css_class(button, name);
+        foreach (var name in new[] { "empty", "iron", "copper", "tin", "tree", "rock", "oil", "rubber-tree", "latex-collector", "miner", "belt", "pipe", "pump", "fluid-machine", "smelter", "alloy-smelter", "rotor-press", "assembler", "ship", "busy" }) GtkNative.gtk_widget_remove_css_class(button, name);
         GtkNative.gtk_widget_add_css_class(button, css); if (busy) GtkNative.gtk_widget_add_css_class(button, "busy");
     }
 
     void SetMessage(string text) => GtkNative.gtk_label_set_text(statusLabel, text);
     static string TileName(TileKind kind) => kind switch
-    { TileKind.Empty => "Teren liber", TileKind.IronDeposit => "Zăcământ de fier", TileKind.CopperDeposit => "Zăcământ de cupru", TileKind.Rock => "Bolovan", TileKind.Miner => "Miner", TileKind.Belt => "Bandă transportoare", TileKind.Smelter => "Topitor", TileKind.Assembler => "Asamblor", _ => "Navă de marfă" };
+    {
+        TileKind.Empty => "Teren liber", TileKind.IronDeposit => "Zăcământ de fier", TileKind.CopperDeposit => "Zăcământ de cupru",
+        TileKind.TinDeposit => "Zăcământ de staniu", TileKind.Tree => "Copac", TileKind.OilDeposit => "Zăcământ de petrol", TileKind.Rock => "Bolovan", TileKind.Miner => "Miner",
+        TileKind.Belt => "Bandă transportoare", TileKind.Pipe => "Țeavă", TileKind.OilPump => "Pompă de petrol",
+        TileKind.Distillery => "Distilerie", TileKind.ChemicalReactor => "Reactor chimic", TileKind.Polymerizer => "Polimerizator",
+        TileKind.RubberTree => "Arbore de cauciuc", TileKind.LatexCollector => "Colector de latex", TileKind.GlueMixer => "Malaxor de lipici",
+        TileKind.Smelter => "Topitor", TileKind.Assembler => "Asamblor", TileKind.AlloySmelter => "Alloy Smelter",
+        TileKind.RotorPress => "Rotor Press", _ => "Navă de marfă"
+    };
     static string Arrow(Direction d) => d switch { Direction.North => "↑", Direction.East => "→", Direction.South => "↓", _ => "←" };
     static string ItemGlyph(ItemKind? i) => i switch
     {
-        ItemKind.IronOre => "Fe", ItemKind.CopperOre => "Cu", ItemKind.IronPlate => "FeP", ItemKind.CopperPlate => "CuP",
+        ItemKind.IronOre => "Fe", ItemKind.CopperOre => "Cu", ItemKind.IronPlate => "FeP", ItemKind.CopperPlate => "CuP", ItemKind.TinOre => "Sn",
         ItemKind.CopperWire => "Fi", ItemKind.Gear => "An", ItemKind.Circuit => "Ci", ItemKind.Frame => "Ca",
-        ItemKind.Motor => "Mo", ItemKind.AdvancedCircuit => "C+", ItemKind.Processor => "Pr", ItemKind.RocketPart => "Ra", _ => "·"
+        ItemKind.Motor => "Mo", ItemKind.AdvancedCircuit => "C+", ItemKind.Processor => "Pr", ItemKind.RocketPart => "Ra",
+        ItemKind.Bronze => "Br", ItemKind.Rotor => "Ro", ItemKind.Pump => "Pu", ItemKind.Mainframe => "Mf", ItemKind.Thruster => "Th", _ => "·"
     };
 
     IntPtr Button(string text, string? css = null)
@@ -1704,6 +2163,7 @@ static class GtkNative
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_set_child(IntPtr window, IntPtr child);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_present(IntPtr window);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_maximize(IntPtr window);
+    [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_window_close(IntPtr window);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern IntPtr gtk_box_new(int orientation, int spacing);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_box_set_spacing(IntPtr box, int spacing);
     [DllImport(Gtk, CallingConvention = CallingConvention.Cdecl)] public static extern void gtk_box_append(IntPtr box, IntPtr child);
