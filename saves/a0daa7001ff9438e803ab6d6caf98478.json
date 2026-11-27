@@ -3,22 +3,22 @@
   "Id": "a0daa7001ff9438e803ab6d6caf98478",
   "Name": "ok",
   "CreatedUtc": "2026-11-26T12:31:18.6947467Z",
-  "UpdatedUtc": "2026-11-26T13:39:22.429518Z",
+  "UpdatedUtc": "2026-11-27T06:55:38.4411791Z",
   "CameraX": 6,
   "CameraY": 20,
   "Game": {
     "Seed": 738493,
-    "Money": 99542,
-    "Delivered": 4790,
-    "Tick": 1787,
+    "Money": 108368,
+    "Delivered": 5104,
+    "Tick": 1861,
     "Level": 7,
     "LevelProgress": 8,
     "ContractItems": {
       "Circuit": 8
     },
     "ContractFluids": {},
-    "LastIncome": 137,
-    "LastSales": "Plac\u0103 de fier, Fir de cupru, Cadru ranforsat, etanol, polietilen\u0103",
+    "LastIncome": 127,
+    "LastSales": "Plac\u0103 de fier, Fir de cupru, Roat\u0103 din\u021Bat\u0103, etanol, polietilen\u0103",
     "GeneratedChunks": [
       {
         "X": 0,
@@ -5251,9 +5251,7 @@
         "Direction": 0,
         "Ore": null,
         "Progress": 0,
-        "Stock": {
-          "IronPlate": 1
-        },
+        "Stock": {},
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
@@ -8170,14 +8168,14 @@
         "Ore": null,
         "Progress": 0,
         "Stock": {
-          "TinOre": 297
+          "TinOre": 315
         },
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
         "PipeFluid": null,
         "FluidInput": null,
-        "FluidOutput": null,
+        "FluidOutput": 6,
         "RecipeId": "soldering_alloy",
         "FluidRecipeId": null,
         "PlayerBuilt": false
@@ -8354,8 +8352,7 @@
         "Ore": null,
         "Progress": 0,
         "Stock": {
-          "IronPlate": 149,
-          "CopperWire": 1
+          "IronPlate": 167
         },
         "Output": {},
         "FluidStock": {
@@ -8398,7 +8395,7 @@
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
-        "PipeFluid": 6,
+        "PipeFluid": null,
         "FluidInput": null,
         "FluidOutput": null,
         "RecipeId": null,
@@ -8599,7 +8596,7 @@
         "Stock": {},
         "Output": {},
         "FluidStock": {},
-        "BeltItem": null,
+        "BeltItem": 6,
         "PipeFluid": null,
         "FluidInput": null,
         "FluidOutput": null,
@@ -9626,7 +9623,7 @@
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
-        "PipeFluid": null,
+        "PipeFluid": 5,
         "FluidInput": null,
         "FluidOutput": null,
         "RecipeId": null,
@@ -9712,7 +9709,9 @@
         "Direction": 0,
         "Ore": null,
         "Progress": 0,
-        "Stock": {},
+        "Stock": {
+          "IronPlate": 1
+        },
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
@@ -9733,7 +9732,7 @@
         "Stock": {},
         "Output": {},
         "FluidStock": {},
-        "BeltItem": 5,
+        "BeltItem": null,
         "PipeFluid": null,
         "FluidInput": null,
         "FluidOutput": null,
@@ -9752,7 +9751,7 @@
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
-        "PipeFluid": 5,
+        "PipeFluid": null,
         "FluidInput": null,
         "FluidOutput": null,
         "RecipeId": null,
@@ -9788,7 +9787,7 @@
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
-        "PipeFluid": null,
+        "PipeFluid": 5,
         "FluidInput": null,
         "FluidOutput": null,
         "RecipeId": null,
@@ -9824,7 +9823,7 @@
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
-        "PipeFluid": null,
+        "PipeFluid": 5,
         "FluidInput": null,
         "FluidOutput": null,
         "RecipeId": null,
@@ -9860,7 +9859,7 @@
         "Output": {},
         "FluidStock": {},
         "BeltItem": null,
-        "PipeFluid": 5,
+        "PipeFluid": null,
         "FluidInput": null,
         "FluidOutput": null,
         "RecipeId": null,
@@ -9911,7 +9910,8 @@
         "Ore": null,
         "Progress": 0,
         "Stock": {
-          "Gear": 52
+          "Gear": 53,
+          "IronPlate": 1
         },
         "Output": {},
         "FluidStock": {

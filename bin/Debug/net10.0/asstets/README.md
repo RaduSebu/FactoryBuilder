@@ -1,4 +1,4 @@
-# Sprite-uri pentru clădiri
+# Sprite-uri pentru clădiri plasate
 
 Jocul animează sprite-urile schimbând cadre PNG la fiecare 180 ms. Înlocuiește imaginile păstrând structura și numele `frame_00.png`, `frame_01.png` etc.; toate cadrele trebuie să aibă aceeași dimensiune și fundal transparent. Dimensiunea recomandată este 64×64 px. Un singur cadru PNG produce un sprite static.
 
